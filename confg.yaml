@@ -1,0 +1,4 @@
+clock:
+  timezone    : "US/Mountain"
+  hardware_utc: true
+  enable_ntp  : true
