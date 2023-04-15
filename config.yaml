@@ -16,6 +16,12 @@ packages:
   additional-packages: # Any additional packages go here (each entry gets its own line)
     - "reflector"
 
+boot:
+  efi: true
+  bootloader: "refind"
+
+  # @TODO add bootloader configuration options
+
 clock:
   timezone: "US/Mountain" # Time zone from /usr/share/zoneinfo/
   hardware-utc: true      # Whether or not to set hardware clock using UTC
