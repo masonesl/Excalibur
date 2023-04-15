@@ -22,8 +22,9 @@ clock:
   enable-ntp: true        # Whether or not to enable NTP time synchonization 
 
 locales:
-  locale-conf: "en_US.UTF-8"
-  gen-locales:
+  locale-conf: "en_US.UTF-8" # Locale to be added to /etc/locale.conf
+
+  gen-locales:               # Locales to be uncommented in /etc/locale.gen
     - "en_US.UTF-8 UTF-8"
     - "en_US ISO-8859-1"
     - "ja_JP.UTF-8 UTF-8"
