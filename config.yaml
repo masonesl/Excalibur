@@ -1,26 +1,24 @@
 ---
-packages:
-  kernel: "linux-zen" # Which kernel to install
-  firmware: true      # Install linux-firmware
-
-  network-manager:
-    package: "networkmanager" # Acutal package name 
-    service: "NetworkManager" # Name to enable service
-
-  ssh:
-    package: "openssh" # Actual package name
-    service: "sshd"    # Name to enable service
-
-  text-editor: "neovim"
-
-  additional-packages: # Any additional packages go here (each entry gets its own line)
-    - "reflector"
+kernel: "linux-zen"
+linux-firmware: true
 
 boot:
-  efi: true
   bootloader: "refind"
+  efi: true
 
   # @TODO add bootloader configuration options
+
+ssh:
+  package-name: "openssh"
+  service-name: "sshd"
+
+network:
+  package-name: "networkmanager"
+  service-name: "NetworkManager"
+
+additional-packages:
+  - "reflector" # @TODO more reflector configuration options
+  - "neovim"
 
 clock:
   timezone: "US/Mountain" # Time zone from /usr/share/zoneinfo/
