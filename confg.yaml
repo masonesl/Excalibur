@@ -13,3 +13,10 @@ clock:
   timezone: "US/Mountain"
   hardware-utc: true
   enable-ntp: true
+
+locales:
+  locale-conf: "en_US.UTF-8"
+  gen-locales:
+    - "en_US.UTF-8 UTF-8"
+    - "en_US ISO-8859-1"
+    - "ja_JP.UTF-8 UTF-8"
