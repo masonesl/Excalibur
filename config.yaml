@@ -17,9 +17,9 @@ packages:
     - "reflector"
 
 clock:
-  timezone: "US/Mountain"
-  hardware-utc: true
-  enable-ntp: true
+  timezone: "US/Mountain" # Time zone from /usr/share/zoneinfo/
+  hardware-utc: true      # Whether or not to set hardware clock using UTC
+  enable-ntp: true        # Whether or not to enable NTP time synchonization 
 
 locales:
   locale-conf: "en_US.UTF-8"
