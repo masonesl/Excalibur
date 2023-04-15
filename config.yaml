@@ -1,13 +1,20 @@
 ---
-pacstrap:
-  kernel: "linux-zen"
-  firmware: true        # Installs linux-firmware
-  network-manager: true # Installs networkmanager
-  ssh-daemon: true      # Installs openssh
+packages:
+  kernel: "linux-zen" # Which kernel to install
+  firmware: true      # Install linux-firmware
+
+  network-manager:
+    package: "networkmanager" # Acutal package name 
+    service: "NetworkManager" # Name to enable service
+
+  ssh:
+    package: "openssh" # Actual package name
+    service: "sshd"    # Name to enable service
+
   text-editor: "neovim"
-  boot:
-    efi: true
-    bootloader: "refind"
+
+  additional-packages: # Any additional packages go here (each entry gets its own line)
+    - "reflector"
 
 clock:
   timezone: "US/Mountain"
