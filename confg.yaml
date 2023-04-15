@@ -1,4 +1,15 @@
+---
+pacstrap:
+  kernel: "linux-zen"
+  firmware: true        # Installs linux-firmware
+  network-manager: true # Installs networkmanager
+  ssh-daemon: true      # Installs openssh
+  text-editor: "neovim"
+  boot:
+    efi: true
+    bootloader: "refind"
+
 clock:
-  timezone    : "US/Mountain"
-  hardware_utc: true
-  enable_ntp  : true
+  timezone: "US/Mountain"
+  hardware-utc: true
+  enable-ntp: true
