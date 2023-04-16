@@ -5,6 +5,7 @@ import os
 from yaml import safe_load
 
 from scripts.pacstrap import pacstrap
+from scripts.drive_configs import partition
 
 
 ROOT_MOUNTPOINT = "mnt"
@@ -30,7 +31,9 @@ def main():
     if not os.path.exists(ROOT_MOUNTPOINT):
         os.mkdir(ROOT_MOUNTPOINT)
     
-    
+    if PARTITION_DISKS:
+        for disk in config_options["disks"].values():
+            program_output.append(partition(disk))
 
     if PACSTRAP:
         program_output.append(pacstrap(ROOT_MOUNTPOINT))
