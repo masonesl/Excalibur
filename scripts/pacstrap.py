@@ -1,7 +1,11 @@
-from subprocess import run
+import subprocess
 
-command_output = []
+# @TODO Add some type of logging
 
-def pacstrap(mountpoint: str="/mnt") -> None:
-    command_output.append(["pacstrap", mountpoint, "base", "base-devel"])
+def pacstrap(mountpoint: str="/mnt") -> list:
 
+    return [subprocess.run(
+        ["pacstrap", mountpoint, "base", "base-devel"],
+        capture_output=True)]
+
+# EOF
