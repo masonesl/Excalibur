@@ -4,6 +4,8 @@ import os
 
 from yaml import safe_load
 
+from scripts.pacstrap import pacstrap
+
 
 ROOT_MOUNTPOINT = "mnt"
 
@@ -28,7 +30,10 @@ def main():
     if not os.path.exists(ROOT_MOUNTPOINT):
         os.mkdir(ROOT_MOUNTPOINT)
     
+    
 
+    if PACSTRAP:
+        program_output.append(pacstrap(ROOT_MOUNTPOINT))
     
 if __name__ == "__main__":
     main()
