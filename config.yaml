@@ -1,6 +1,8 @@
 ---
-kernel: ""
-linux-firmware: true
+kernel: ""           # Leave blank for the base linux kernel (Supports 'zen', 'hardened' & 'lts')
+linux-firmware: true # Install linux-firmware
+
+hostname: "excalibur"
 
 aur:
   enable: true
@@ -13,11 +15,11 @@ boot:
   # @TODO add bootloader configuration options
 
 packages:
-  - "reflector"
-  - "neovim"
   - "networkmanager"
   - "openssh"
-
+  - "reflector"
+  - "neovim"
+  
 services:
   - "NetworkManager"
   - "sshd"
@@ -25,8 +27,8 @@ services:
 
 clock:
   timezone: "US/Mountain" # Time zone from /usr/share/zoneinfo/
-  hardware-utc: true      # Whether or not to set hardware clock using UTC
-  enable-ntp: true        # Whether or not to enable NTP time synchonization 
+  hardware-utc: true      # Use the '--utc' option on 'hwclock --systohc'
+  enable-ntp: true        # Enable systemd-timesyncd 
 
 locales:
   locale-conf: "en_US.UTF-8" # Locale to be added to /etc/locale.conf
