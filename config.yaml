@@ -11,8 +11,8 @@ aur:
 boot:
   bootloader: "grub"
   efi: true
-
   # @TODO add bootloader configuration options
+
 
 packages:
   - "networkmanager"
@@ -24,6 +24,7 @@ services:
   - "NetworkManager"
   - "sshd"
   - "reflector.timer"
+
 
 clock:
   timezone: "US/Mountain" # Time zone from /usr/share/zoneinfo/
@@ -38,6 +39,7 @@ locales:
     - "en_US ISO-8859-1"
     - "ja_JP.UTF-8 UTF-8"
 
+
 user-config:
   # Might add more general user configuration
 
@@ -48,3 +50,21 @@ user-config:
       - home: "/home/mason"
       - groups:
         - "wheel"
+
+
+disks:
+  disk1:
+    path: "/dev/sda"
+
+    partitions:
+      part1:
+        start-sector: ""
+        end-sector: "+1G"
+        type-code: "ef00"
+      part2:
+        end-sector: "+4G"
+        type-code: "8200"
+      part3:
+        start-sector: ""
+        end-sector: ""
+        type-code: "8300"
