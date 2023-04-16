@@ -2,6 +2,10 @@
 kernel: "linux-zen"
 linux-firmware: true
 
+aur:
+  enable: true
+  helper: "paru"
+
 boot:
   bootloader: "refind"
   efi: true
