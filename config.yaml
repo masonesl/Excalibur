@@ -54,17 +54,21 @@ user-config:
 
 disks:
   disk1:
-    path: "/dev/sda"
+    path: "/dev/vda"
 
     partitions:
       part1:
-        start-sector: ""
+        start-sector: "0"
         end-sector: "+1G"
         type-code: "ef00"
+        label: "EFI Partition"
       part2:
+        start-sector: "0"
         end-sector: "+4G"
         type-code: "8200"
+        label: "Swap Partition"
       part3:
-        start-sector: ""
-        end-sector: ""
+        start-sector: "0"
+        end-sector: "0"
         type-code: "8300"
+        label: "Root Partition"
