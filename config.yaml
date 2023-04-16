@@ -1,5 +1,5 @@
 ---
-kernel: "linux-zen"
+kernel: ""
 linux-firmware: true
 
 aur:
@@ -7,22 +7,21 @@ aur:
   helper: "paru"
 
 boot:
-  bootloader: "refind"
+  bootloader: "grub"
   efi: true
 
   # @TODO add bootloader configuration options
 
-ssh:
-  package-name: "openssh"
-  service-name: "sshd"
-
-network:
-  package-name: "networkmanager"
-  service-name: "NetworkManager"
-
-additional-packages:
-  - "reflector" # @TODO more reflector configuration options
+packages:
+  - "reflector"
   - "neovim"
+  - "networkmanager"
+  - "openssh"
+
+services:
+  - "NetworkManager"
+  - "sshd"
+  - "reflector.timer"
 
 clock:
   timezone: "US/Mountain" # Time zone from /usr/share/zoneinfo/
