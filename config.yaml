@@ -58,21 +58,39 @@ disks:
     gpt: true
 
     partitions:
+
       part1:
         start-sector: "0"
         end-sector: "+1G"
         type-code: "ef00"
         label: "EFI Partition"
         id: "efi"
+
       part2:
+
         start-sector: "0"
         end-sector: "+4G"
         type-code: "8200"
         label: "Swap Partition"
         id: "swap"
+
       part3:
         start-sector: "0"
         end-sector: "0"
         type-code: "8300"
         label: "Root Partition"
         id: "root"
+
+
+filesystems:
+
+  efi:
+    filesystem: "vfat"
+    options: "-F32"
+    label: "EFI"
+  
+  root:
+    filesystem: "xfs"
+    options: ""
+    label: "ROOT"
+
