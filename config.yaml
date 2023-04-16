@@ -41,7 +41,6 @@ locales:
 
 
 user-config:
-  # Might add more general user configuration
 
   users:
     mason:
@@ -53,8 +52,10 @@ user-config:
 
 
 disks:
+
   disk1:
     path: "/dev/vda"
+    gpt: true
 
     partitions:
       part1:
@@ -62,13 +63,16 @@ disks:
         end-sector: "+1G"
         type-code: "ef00"
         label: "EFI Partition"
+        id: "efi"
       part2:
         start-sector: "0"
         end-sector: "+4G"
         type-code: "8200"
         label: "Swap Partition"
+        id: "swap"
       part3:
         start-sector: "0"
         end-sector: "0"
         type-code: "8300"
         label: "Root Partition"
+        id: "root"
