@@ -59,38 +59,39 @@ disks:
 
     partitions:
 
-      part1:
+      efi:
         start-sector: "0"
         end-sector: "+1G"
         type-code: "ef00"
         label: "EFI Partition"
-        id: "efi"
 
-      part2:
+      swap:
 
         start-sector: "0"
         end-sector: "+4G"
         type-code: "8200"
         label: "Swap Partition"
-        id: "swap"
 
-      part3:
+      root:
         start-sector: "0"
         end-sector: "0"
         type-code: "8300"
         label: "Root Partition"
-        id: "root"
 
 
 filesystems:
 
   efi:
-    filesystem: "vfat"
+    filesystem: "ext4"
     options: "-F32"
     label: "EFI"
+
+  swap:
+    filesystem: "swap"
+    options: ""
+    label: "SWAP"
   
   root:
     filesystem: "xfs"
     options: ""
     label: "ROOT"
-
