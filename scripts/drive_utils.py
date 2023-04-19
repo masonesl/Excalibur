@@ -100,6 +100,20 @@ class Formattable:
         self.partition_path  = f"/dev/mapper/{mapper_name}"
         self.encrypt_uuid    = self.__get_blkid("UUID")
 
+    def mount_filesystem(self, override_mount=""):
+        match self.filesystem:
+            case "swap":
+                mount_command = ["swapon", self.partition_path]
+            case _:
+                mount_command = ["mount", self.partition_path]
+                mount_command.append(
+                    override_mount if override_mount else self.mountpoint
+                )
+        
+        # subprocess.run(mount_command, capture_output=True)
+
+        print(" ".join(mount_command))
+
     
 class RaidArray(Formattable):
 
