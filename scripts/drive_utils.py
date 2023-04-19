@@ -30,6 +30,7 @@ class Formattable:
 
     def new_filesystem(self, filesystem: str,
                              label     : str="",
+                             mountpoint: str="",
                              *options,):
 
         if filesystem not in Formattable.FILESYSTEMS:
@@ -45,7 +46,7 @@ class Formattable:
                 mkfs_command = [f"mkfs.{filesystem}", "-L"]
 
         # Append filesystem label
-        mkfs_command.append(f"'{label}'")
+        mkfs_command.append(label)
 
         # Append any other command options
         mkfs_command += options
@@ -60,6 +61,7 @@ class Formattable:
         # Store filesystem information
         self.filesystem = filesystem
         self.label      = label
+        self.mountpoint = mountpoint
         self.uuid       = self.__get_blkid("UUID")
 
     def encrypt_partition(self, password   : str,
@@ -72,8 +74,10 @@ class Formattable:
         cryptsetup_open_command   = ["cryptsetup", "luksOpen", self.partition_path, mapper_name]
 
         # Append any additional options to each command
-        cryptsetup_format_command += options["format_options"]
-        cryptsetup_open_command   += options["open_options"]
+        if "format_options" in options:
+            cryptsetup_format_command += options["format_options"]
+        if "open_options" in options:
+            cryptsetup_open_command   += options["open_options"]
 
         # cryptsetup_format = subprocess.Popen(cryptsetup_format_command, stdout=subprocess.PIPE,
         #                                                                 stdin =subprocess.PIPE,
