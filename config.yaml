@@ -52,58 +52,54 @@ user-config:
 
 
 drives:
-
-  nvme1:
+  vda:
     device-path: "/dev/vda"
-    gpt: true
-    
     partitions:
-
       efi:
-        size: "4G"
+        size: "1G"
         type-code: "ef00"
         partition-label: "EFI Partition"
-
-      swap:
-        size: "16G"
-        type-code: "8200"
-        partition-label: "Swap Partition"
-
+      raidpart1:
+        size: "4G"
+        type-code: "fd00"
+        partition-label: "Raid Part 1"
       root:
         partition-label: "Root Partition"
-
-  nvme2:
+  vdb:
     device-path: "/dev/vdb"
-    gpt: true
-
     partitions:
+      raidpart2:
+        start-sector: "+1G"
+        end-sector: "+4G"
+        type-code: "fd00"
+        partition-label: "Raid Part 2"
       home:
-        size: "0"
-        type-code: "8300"
         partition-label: "Home Partition"
 
+raid:
+  swap:
+    devices:
+      - raidpart1
+      - raidpart2
+    array-name: "RAIDSWAP"
+    level: 0
+
+crypt:
+  swap:
+    crypt-label: "CRYPTSWAP"
 
 filesystems:
-
   efi:
     filesystem: "efi"
     label: "EFI BOOT"
-
   swap:
     filesystem: "swap"
     label: "SWAP"
-
   root:
     filesystem: "ext4"
     label: "ROOT"
-
   home:
     filesystem: "xfs"
     label: "HOME"
 
-
-crypt:
-
-  swap:
-    crypt-label: "CRYPTSWAP"
 
