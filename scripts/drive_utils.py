@@ -1,4 +1,5 @@
 import subprocess
+from re import search
 
 
 # @TODO Add logging
@@ -44,7 +45,7 @@ class Formattable:
                 mkfs_command = [f"mkfs.{filesystem}", "-L"]
 
         # Append filesystem label
-        mkfs_command.append(label)
+        mkfs_command.append(f"'{label}'")
 
         # Append any other command options
         mkfs_command += options
@@ -174,7 +175,13 @@ class Partition(Formattable):
 
         print(" ".join(sgdisk_command))
 
-        super().__init__(f"{device_path}p{partition_number}", partition_label)
+        partition_path = "{path}{sep}{num}".format(
+            path=device_path,
+            sep ="p" if search("\d{1}$", device_path) else "",
+            num =partition_number
+        )
+
+        super().__init__(partition_path, partition_label)
 
 
 class Drive:
