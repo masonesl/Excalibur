@@ -2,10 +2,11 @@ import subprocess
 # import logging
 import os
 
+from getpass import getpass
 from yaml import safe_load
 
 from scripts.pacstrap import pacstrap
-from scripts.drive_utils import Drive
+from scripts.drive_utils import Drive, RaidArray
 from scripts.merge_default import Defaults, merge
 
 ROOT_MOUNTPOINT = "mnt"
@@ -17,13 +18,15 @@ with open("config.yaml", "r") as config_file:
     config_options = safe_load(config_file)
 
 
-PARTITION_DISKS   = True
-FORMAT_PARTITIONS = True
-PACSTRAP          = False
-INSTALL_PACKAGES  = False
-CONFIGURE_CLOCK   = False
-CONFIGURE_LOCALES = False
-CONFIGURE_USERS   = False
+PARTITION_DISKS    = True
+ENCRYPT_PARTITIONS = True
+FORMAT_PARTITIONS  = True
+SETUP_RAID_ARRAYS  = True
+PACSTRAP           = False
+INSTALL_PACKAGES   = False
+CONFIGURE_CLOCK    = False
+CONFIGURE_LOCALES  = False
+CONFIGURE_USERS    = False
 
 def main():
     # Make sure that the mountpoint directory exists and create it if is doesn't
@@ -49,6 +52,8 @@ def main():
                                          Defaults.PARTITION)
 
                 drives[drive].new_partition(partition_size=partition_config["size"],
+                                            start_sector=partition_config["start-sector"],
+                                            end_sector=partition_config["end-sector"],
                                             type_code=partition_config["type-code"],
                                             partition_label=partition_config["partition-label"],
                                             uid=uid)
@@ -56,12 +61,39 @@ def main():
 
         print(devices)
 
+    if SETUP_RAID_ARRAYS:
+        for uid in config_options["raid"]:
+            raid_config = config_options["raid"][uid]
+            raid_devices = []
+
+            for raid_device_uid in raid_config["devices"]:
+                raid_devices.append(devices[raid_device_uid])
+            
+            devices[uid] = RaidArray(devices=raid_devices,
+                                     array_name=raid_config["array-name"],
+                                     level=raid_config["level"])
+
+    if ENCRYPT_PARTITIONS:
+        for uid in config_options["crypt"]:
+            crypt_config = config_options["crypt"][uid]
+
+            passwords_match = False
+            while not passwords_match:
+                password = getpass(f"Set password for {uid}: ")
+                if getpass(f"Repeat password for {uid}: ") == password:
+                    passwords_match = True
+                else:
+                    print("Passwords do not match.")
+
+            devices[uid].encrypt_partition(password, crypt_config["crypt-label"])
+
     if FORMAT_PARTITIONS:
         for uid in config_options["filesystems"]:
             filesystem_config = config_options["filesystems"][uid]
 
             devices[uid].new_filesystem(filesystem_config["filesystem"],
                                          filesystem_config["label"])
+
 
     if PACSTRAP:
         program_output.append(pacstrap(ROOT_MOUNTPOINT))
