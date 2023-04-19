@@ -17,6 +17,12 @@ class Defaults(Enum):
         "partition-label" : None
     }
 
+    FILESYSTEM = {
+        "filesystem": None,
+        "label": None,
+        "mountpoint": None
+    }
+
 
 def merge(config: dict, default_config: Defaults):
     default_config = default_config.value
