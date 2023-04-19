@@ -51,47 +51,53 @@ user-config:
         - "wheel"
 
 
-disks:
+drives:
 
-  disk1:
-    path: "/dev/vda"
+  nvme1:
+    device-path: "/dev/vda"
     gpt: true
-
+    
     partitions:
 
       efi:
-        start-sector: "0"
-        end-sector: "+1G"
+        size: "4G"
         type-code: "ef00"
-        label: "EFI Partition"
+        partition-label: "EFI Partition"
 
       swap:
-
-        start-sector: "0"
-        end-sector: "+4G"
+        size: "16G"
         type-code: "8200"
-        label: "Swap Partition"
+        partition-label: "Swap Partition"
 
       root:
-        start-sector: "0"
-        end-sector: "0"
+        partition-label: "Root Partition"
+
+  nvme2:
+    device-path: "/dev/vdb"
+    gpt: true
+
+    partitions:
+      home:
+        size: "0"
         type-code: "8300"
-        label: "Root Partition"
+        partition-label: "Home Partition"
 
 
 filesystems:
 
   efi:
-    filesystem: "ext4"
-    options: "-F32"
-    label: "EFI"
+    filesystem: "efi"
+    label: "EFI BOOT"
 
   swap:
     filesystem: "swap"
-    options: ""
     label: "SWAP"
-  
+
   root:
-    filesystem: "xfs"
-    options: ""
+    filesystem: "ext4"
     label: "ROOT"
+
+  home:
+    filesystem: "xfs"
+    label: "HOME"
+
