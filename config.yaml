@@ -101,3 +101,9 @@ filesystems:
     filesystem: "xfs"
     label: "HOME"
 
+
+crypt:
+
+  swap:
+    crypt-label: "CRYPTSWAP"
+
