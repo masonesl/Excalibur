@@ -92,14 +92,17 @@ filesystems:
   efi:
     filesystem: "efi"
     label: "EFI BOOT"
+    mountpoint: "/efi"
   swap:
     filesystem: "swap"
     label: "SWAP"
   root:
     filesystem: "ext4"
     label: "ROOT"
+    mountpoint: "/"
   home:
     filesystem: "xfs"
     label: "HOME"
+    mountpoint: "/home"
 
 
