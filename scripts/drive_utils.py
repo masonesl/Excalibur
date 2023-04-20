@@ -18,6 +18,7 @@ class Formattable:
 
         self.filesystem = None
         self.label      = None
+        self.mountpoint = None
         self.uuid       = None
 
         self.is_encrypted = False
@@ -102,6 +103,8 @@ class Formattable:
 
     def mount_filesystem(self, override_mount=""):
         match self.filesystem:
+            case None:
+                return
             case "swap":
                 mount_command = ["swapon", self.partition_path]
             case _:
@@ -134,7 +137,7 @@ class RaidArray(Formattable):
         mdadm_command.append(f"--name={array_name}")
 
         # Set the array to have the same name regardless of host
-        mdadm_command.append("--hosthost=any")
+        mdadm_command.append("--homehost=any")
 
         # Add any additional options to command
         mdadm_command += options
