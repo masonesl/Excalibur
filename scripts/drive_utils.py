@@ -108,7 +108,7 @@ class Formattable:
             case "swap":
                 mount_command = ["swapon", self.partition_path]
             case _:
-                mount_command = ["mount", self.partition_path]
+                mount_command = ["mount", "-m", self.partition_path]
                 mount_command.append(
                     override_mount if override_mount else self.mountpoint
                 )
@@ -139,6 +139,8 @@ class RaidArray(Formattable):
         # Set the array to have the same name regardless of host
         mdadm_command.append("--homehost=any")
 
+        mdadm_command.append(f"/dev/md/{array_name}")
+
         # Add any additional options to command
         mdadm_command += options
 
@@ -153,7 +155,7 @@ class RaidArray(Formattable):
 
         print(" ".join(mdadm_command))
 
-        super().__init__(device_path=f"/dev/mapper/{array_name}", 
+        super().__init__(device_path=f"/dev/md/{array_name}", 
                          partition_label=array_name)
 
 
