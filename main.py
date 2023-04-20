@@ -8,6 +8,7 @@ from yaml import safe_load
 from scripts.pacstrap import pacstrap
 from scripts.drive_utils import Drive, RaidArray
 from scripts.merge_default import Defaults, merge
+from scripts import clock
 
 ROOT_MOUNTPOINT = "mnt"
 
@@ -18,14 +19,14 @@ with open("config.yaml", "r") as config_file:
     config_options = safe_load(config_file)
 
 
-PARTITION_DISKS    = True
-ENCRYPT_PARTITIONS = True
-FORMAT_PARTITIONS  = True
-SETUP_RAID_ARRAYS  = True
-MOUNT_FILESYSTEMS  = True
+PARTITION_DISKS    = False
+ENCRYPT_PARTITIONS = False
+FORMAT_PARTITIONS  = False
+SETUP_RAID_ARRAYS  = False
+MOUNT_FILESYSTEMS  = False
 PACSTRAP           = False
 INSTALL_PACKAGES   = False
-CONFIGURE_CLOCK    = False
+CONFIGURE_CLOCK    = True
 CONFIGURE_LOCALES  = False
 CONFIGURE_USERS    = False
 
@@ -116,8 +117,10 @@ def main():
             devices[uid].mount_filesystem(f"/mnt{devices[uid].mountpoint}")
 
     if PACSTRAP:
-        program_output.append(pacstrap(ROOT_MOUNTPOINT))
-    
+        pacstrap()
+
+    if CONFIGURE_CLOCK:
+        clock.configure("US/Mountain")
     
 if __name__ == "__main__":
     main()
