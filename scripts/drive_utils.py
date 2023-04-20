@@ -55,7 +55,7 @@ class Formattable:
         # Specify the block device to format
         mkfs_command.append(self.partition_path)
 
-        # subprocess.run(mkfs_command, capture_output=True)
+        # print(subprocess.run(mkfs_command, capture_output=True))
 
         print(" ".join(mkfs_command))
 
@@ -84,7 +84,7 @@ class Formattable:
         #                                                                 stdin =subprocess.PIPE,
         #                                                                 stderr=subprocess.PIPE)
 
-        # cryptsetup_format.communicate(input=password.encode())
+        # print(cryptsetup_format.communicate(input=password.encode()))
 
         print(" ".join(cryptsetup_format_command))
 
@@ -92,7 +92,7 @@ class Formattable:
         #                                                             stdin =subprocess.PIPE,
         #                                                             stderr=subprocess.PIPE)
 
-        # cryptsetup_open.communicate(input=password.encode())
+        # print(cryptsetup_open.communicate(input=password.encode()))
 
         print(" ".join(cryptsetup_open_command))
 
@@ -113,7 +113,7 @@ class Formattable:
                     override_mount if override_mount else self.mountpoint
                 )
         
-        # subprocess.run(mount_command, capture_output=True)
+        # print(subprocess.run(mount_command, capture_output=True))
 
         print(" ".join(mount_command))
 
@@ -151,7 +151,7 @@ class RaidArray(Formattable):
             except AttributeError:
                 mdadm_command.append(device.partition_path)
 
-        # subprocess.run(mdadm_command, capture_output=True)
+        # print(subprocess.run(mdadm_command, capture_output=True))
 
         print(" ".join(mdadm_command))
 
@@ -194,7 +194,7 @@ class Partition(Formattable):
         # Specify the drive via its device path
         sgdisk_command.append(device_path)
 
-        # subprocess.run(sgdisk_command, capture_output=True)
+        # print(subprocess.run(sgdisk_command, capture_output=True))
 
         print(" ".join(sgdisk_command))
 
