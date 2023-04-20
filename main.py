@@ -22,11 +22,23 @@ PARTITION_DISKS    = True
 ENCRYPT_PARTITIONS = True
 FORMAT_PARTITIONS  = True
 SETUP_RAID_ARRAYS  = True
+MOUNT_FILESYSTEMS  = True
 PACSTRAP           = False
 INSTALL_PACKAGES   = False
 CONFIGURE_CLOCK    = False
 CONFIGURE_LOCALES  = False
 CONFIGURE_USERS    = False
+
+
+def sort_by_mountpoint(partition):
+    if not partition[1].mountpoint:
+        return -1
+    elif partition[1].mountpoint == "/":
+        return 0
+    elif partition[1].filesystem == "swap":
+        return -1
+    else:
+        return len(partition[1].mountpoint.split("/"))
 
 def main():
     # Make sure that the mountpoint directory exists and create it if is doesn't
@@ -57,9 +69,8 @@ def main():
                                             type_code=partition_config["type-code"],
                                             partition_label=partition_config["partition-label"],
                                             uid=uid)
-                devices[uid] = drives[drive][uid]
 
-        print(devices)
+                devices[uid] = drives[drive][uid]
 
     if SETUP_RAID_ARRAYS:
         for uid in config_options["raid"]:
@@ -89,11 +100,20 @@ def main():
 
     if FORMAT_PARTITIONS:
         for uid in config_options["filesystems"]:
-            filesystem_config = config_options["filesystems"][uid]
+            filesystem_config = merge(config_options["filesystems"][uid],
+                                      Defaults.FILESYSTEM)
 
             devices[uid].new_filesystem(filesystem_config["filesystem"],
-                                         filesystem_config["label"])
+                                        filesystem_config["label"],
+                                        filesystem_config["mountpoint"])
 
+        sorted_devices = dict(sorted(devices.items(), key=sort_by_mountpoint))
+        print(devices)
+        print(sorted_devices)
+
+    if MOUNT_FILESYSTEMS:
+        for uid in sorted_devices:
+            devices[uid].mount_filesystem(f"/mnt{devices[uid].mountpoint}")
 
     if PACSTRAP:
         program_output.append(pacstrap(ROOT_MOUNTPOINT))
