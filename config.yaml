@@ -1,92 +1,64 @@
 ---
-kernel: ""           # Leave blank for the base linux kernel (Supports 'zen', 'hardened' & 'lts')
-linux-firmware: true # Install linux-firmware
-
-hostname: "excalibur"
-
-aur:
-  enable: true
-  helper: "paru"
-
-boot:
-  bootloader: "grub"
-  efi: true
-  # @TODO add bootloader configuration options
-
-
-packages:
-  - "networkmanager"
-  - "openssh"
-  - "reflector"
-  - "neovim"
-  
-services:
-  - "NetworkManager"
-  - "sshd"
-  - "reflector.timer"
-
-
-clock:
-  timezone: "US/Mountain" # Time zone from /usr/share/zoneinfo/
-  hardware-utc: true      # Use the '--utc' option on 'hwclock --systohc'
-  enable-ntp: true        # Enable systemd-timesyncd 
-
-locales:
-  locale-conf: "en_US.UTF-8" # Locale to be added to /etc/locale.conf
-
-  gen-locales:               # Locales to be uncommented in /etc/locale.gen
-    - "en_US.UTF-8 UTF-8"
-    - "en_US ISO-8859-1"
-    - "ja_JP.UTF-8 UTF-8"
-
-
-user-config:
-
-  users:
-    mason:
-      - name: "mason"
-      - comment: "Mason"
-      - home: "/home/mason"
-      - groups:
-        - "wheel"
-
-
 drives:
   vda:
     device-path: "/dev/vda"
     partitions:
       efi:
-        size: "1G"
+        size: "256M"
         type-code: "ef00"
         partition-label: "EFI Partition"
-      raidpart1:
-        size: "4G"
+      raidswap1:
+        size: "2G"
         type-code: "fd00"
-        partition-label: "Raid Part 1"
-      root:
-        partition-label: "Root Partition"
+        partition-label: "Raid Swap 1"
+      raidroot1:
+        size: "10G"
+        type-code: "fd00"
+        partition-label: "Raid Root 1"
+      raidhome1:
+        type-code: "fd00"
+        partition-label: "Raid Home 1"
   vdb:
     device-path: "/dev/vdb"
     partitions:
-      raidpart2:
-        start-sector: "+1G"
-        end-sector: "+4G"
+      raidswap2:
+        start-sector: "+256M"
+        end-sector: "+2G"
         type-code: "fd00"
-        partition-label: "Raid Part 2"
-      home:
-        partition-label: "Home Partition"
+        partition-label: "Raid Swap 2"
+      raidroot2:
+        size: "10G"
+        type-code: "fd00"
+        partition-label: "Raid Root 2"
+      raidhome2:
+        type-code: "fd00"
+        partition-label: "Raid Home 2"
 
 raid:
   swap:
     devices:
-      - raidpart1
-      - raidpart2
+      - raidswap1
+      - raidswap2
     array-name: "RAIDSWAP"
     level: 0
+  root:
+    devices:
+      - raidroot1
+      - raidroot2
+    array-name: "RAIDROOT"
+    level: 1
+  home:
+    devices:
+      - raidhome1
+      - raidhome2
+    array-name: "RAIDHOME"
+    level: 1
 
 crypt:
   swap:
     crypt-label: "CRYPTSWAP"
+  home:
+    crypt-label: "CRYPTHOME"
 
 filesystems:
   efi:
@@ -101,8 +73,6 @@ filesystems:
     label: "ROOT"
     mountpoint: "/"
   home:
-    filesystem: "xfs"
+    filesystem: "ext4"
     label: "HOME"
     mountpoint: "/home"
-
-
