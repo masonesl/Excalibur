@@ -1,14 +1,19 @@
 import subprocess
 # import logging
 import os
+import sys
 
 from getpass import getpass
 from yaml    import safe_load
+
+sys.path.append(f"{os.getcwd()}/scripts")
 
 from scripts.pacstrap import pacstrap
 from scripts.drive_utils import Drive, RaidArray
 from scripts.merge_default import Defaults, fill_defaults
 from scripts.chroot import Chroot
+
+import scripts.command_utils as command
 
 
 ROOT_MOUNTPOINT = "mnt"
@@ -26,11 +31,13 @@ FORMAT_PARTITIONS  = False
 SETUP_RAID_ARRAYS  = False
 MOUNT_FILESYSTEMS  = False
 PACSTRAP           = False
+
 CHROOT             = True
 CONFIGURE_CLOCK    = True
-CONFIGURE_LOCALES  = False
-CONFIGURE_HOST     = False
-CONFIGURE_USERS    = False
+CONFIGURE_LOCALES  = True
+CONFIGURE_HOSTS    = True
+CONFIGURE_HOSTNAME = True
+CONFIGURE_USERS    = True
 
 # Default config should be merged with actual config before doing anything else
 
@@ -123,7 +130,8 @@ def main():
         pacstrap()
 
     if CHROOT:
-        with Chroot() as chroot_env:
+        command.execute("./mnt/etc/reset.sh")
+        with Chroot(target_mountpoint="mnt", dry_run=True) as chroot_env:
             if CONFIGURE_CLOCK:
                 clock_config = fill_defaults(config_options["clock"],
                                              Defaults.CLOCK)
@@ -139,8 +147,12 @@ def main():
                 chroot_env.configure_locales(locale_config["locale-gen"],
                                              locale_config["locale-conf"])
 
-            if CONFIGURE_HOST:
-                chroot_env.configure_host(config_options["hostname"])
+            if CONFIGURE_HOSTS:
+                chroot_env.configure_hosts()
+            
+            if CONFIGURE_HOSTNAME:
+                chroot_env.set_hostname(config_options["hostname"])
+
         
     
 if __name__ == "__main__":
