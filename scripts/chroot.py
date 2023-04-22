@@ -1,114 +1,88 @@
-import subprocess
-from shlex import split as shsplit
+import command_utils as cmd
+import output_utils  as output
 
 class Chroot:
 
-    def __init__(self, target_mountpoint: str="/mnt"):
+    def __init__(self, target_mountpoint: str="/mnt", dry_run=False):
         # Start an arch-chroot process to mount everything correctly
         # Running commands on the new root won't be done through arch-chroot
         # Each command ran will be run with its own chroot subprocess
         # This probably isn't the best way to do it so it might be changed later
-        # self.arch_chroot_process = subprocess.Popen(
-        #     ["arch-chroot", target_mountpoint],
-        #     stdout=subprocess.PIPE,
-        #     stderr=subprocess.PIPE,
-        #     stdin=subprocess.PIPE
-        # )
-        print("started arch-chroot")
 
-        self.chroot_template = ["chroot", target_mountpoint]
+        self.arch_chroot_process = cmd.execute("bash", 5)
+        output.info(": Started arch-chroot")
+
         self.target = target_mountpoint
+
+        self.dry_run = dry_run
 
     def __enter__(self):
         return self
 
-    def __create_chroot(self, *args) -> subprocess.Popen:
-        return subprocess.Popen(self.chroot_template+(args if args else []), 
-                                stdin=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-
-    def __wrap_chroot(self, command):
-        # return subprocess.Popen(shsplit(f"chroot {self.target} "+command),
-        #                                           stdin=subprocess.PIPE,
-        #                                           stderr=subprocess.PIPE)
-        print(f"chroot {self.target} "+command)
+    def __wrap_chroot(self, command, std_code: int=3):
+        return cmd.execute(f"chroot {self.target} "+command, std_code, self.dry_run)
 
     def configure_clock(self, timezone: str="",
                               hardware_utc: bool=True,
                               enable_ntp: bool=True):
 
-        target = self.target # For readability
-
         # Create a symlink from the timezone file to /etc/localtime
         if timezone:
-            timezone_command = \
-                f"ln -sf {target}/usr/share/zoneinfo/{timezone} {target}/etc/localtime"
-            # subprocess.run(shsplit(timezone_command), stderr=subprocess.PIPE)
-            print(timezone_command)
+            cmd.execute(
+                f"ln -sf {self.target}/usr/share/zoneinfo/{timezone} {self.target}/etc/localtime",
+                dry_run=self.dry_run
+            )
 
         # Configure the hardware clock to system time (with UTC if desired)
-        hardware_clock_command = f"hwclock --systohc {'--utc' if hardware_utc else ''}"
-        self.__wrap_chroot(hardware_clock_command)
+        self.__wrap_chroot(f"hwclock --systohc {'--utc' if hardware_utc else ''}")
 
         # Enable systemd-timesyncd if desired
         if enable_ntp:
-            enable_ntp_command = "systemctl enable systemd-timesyncd"
-            self.__wrap_chroot(enable_ntp_command)
+            self.__wrap_chroot("systemctl enable systemd-timesyncd")
 
     def configure_locales(self, locale_gen: list=["en_US.UTF-8 UTF-8"],
                                 locale_conf: str="en_US.UTF-8"):
-        
-        target = self.target
-
-        # Create a chroot process for locale configuration
-        # locale_chroot = self.__create_chroot()
-        locale_config_command = []
 
         # Uncomment each specified locale in /etc/locale.gen
+        with open(f"{self.target}/etc/locale.gen", "r") as locale_gen_file:
+            locale_file_data = locale_gen_file.read()
+
         for locale in locale_gen:
-            uncomment_locale = f"sed -i s/#{locale}/{locale}/g {target}/etc/locale.gen"
-            # subprocess.Popen(shsplit(uncomment_locale))
-            print(uncomment_locale)
+            locale_file_data = locale_file_data.replace(f"#{locale}", locale)
+
+        with open(f"{self.target}/etc/locale.gen", "w") as locale_gen_file:
+            locale_gen_file.write(locale_file_data)
 
         # Generate locales
         self.__wrap_chroot("locale-gen")
 
         # Set the LANG variable to desired locale
-        locale_config_command.append(f"echo LANG={locale_conf} > /etc/locale.conf")
+        with open(f"{self.target}/etc/locale.conf", "w") as locale_conf_file:
+            locale_conf_file.write(f"LANG={locale_conf}")
 
-        # locale_chroot.communicate(input="\n".join(locale_config_command).encode())
-        print("\n".join(locale_config_command).encode())
+    def configure_hosts(self):
+        # Add localhost entries in /etc/hosts for both IPv4 and IPv6
+        with open(f"{self.target}/etc/hosts", "a") as hosts_file:
+            hosts_file.write("127.0.0.1\tlocalhost\n")
+            hosts_file.write("::1\t\t\tlocalhost\n")
 
-    def configure_host(self, hostname: str="myhostname"):
-        # Create a chroot process for host configuration
-        # host_chroot = self.__create_chroot()
-
-        host_config_command = []
-
-        # Set the hostname
-        host_config_command.append(f"echo {hostname} > /etc/hostname")
-
-        # /etc/hosts configuration section
-        host_config_command.append("echo 127.0.0.1\tlocalhost >> /etc/hosts")
-        host_config_command.append("echo ::1\tlocalhost >> /etc/hosts")
-
-        # host_chroot.communicate(input="\n".join(host_config_command).encode())
-        print("\n".join(host_config_command))
+    def set_hostname(self, hostname: str="myhostname"):
+        with open(f"{self.target}/etc/hostname", "w") as hostname_file:
+            hostname_file.write(hostname)
 
     def configure_users(self, root_password: str="",
                               users: dict={}):
         
-        # Set the root password
-        root_passwd_chroot = self.__create_chroot("passwd")
-        root_passwd_chroot.communicate(input=f"{root_password}\n{root_password}".encode())
-        
-        for username in users:
-            useradd_command = ["useradd", "-m", "-G"] + users[username]["groups"]
+        root_password_proc = self.__wrap_chroot("passwd")
+        root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
 
-            useradd_command.append("")
+
+        
+    def exit(self):
+        self.arch_chroot_process.communicate(b"exit")
+        output.info(": Exited arch-chroot")
 
     def __exit__(self, exc_type, exc_value, traceback):
-        # self.arch_chroot_process.communicate(b"exit")
-        print("exited arch-chroot")
+        self.exit()
 
 
