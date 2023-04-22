@@ -76,3 +76,11 @@ filesystems:
     filesystem: "ext4"
     label: "HOME"
     mountpoint: "/home"
+
+users:
+  mason:
+    shell: "/bin/bash"
+    comment: "Mason"
+    home: "/home/mason"
+    groups:
+      - "wheel"
