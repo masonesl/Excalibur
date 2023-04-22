@@ -6,16 +6,16 @@ class Colors:
     RESET  = "\033[0m"
 
 
-def error(message):
-    print(f"{Colors.RED}{message}{Colors.RESET}")
+def error(message, end="\n"):
+    print(f"{Colors.RED}{message}{Colors.RESET}", end=end)
 
-def success(message):
-    print(f"{Colors.GREEN}{message}{Colors.RESET}")
+def success(message, end="\n"):
+    print(f"{Colors.GREEN}{message}{Colors.RESET}", end=end)
 
-def info(message):
-    print(f"{Colors.BLUE}{message}{Colors.BLUE}")
+def info(message, end="\n"):
+    print(f"{Colors.BLUE}{message}{Colors.RESET}", end=end)
 
-def warn(message):
-    print(f"{Colors.YELLOW}{message}{Colors.RESET}")
+def warn(message, end="\n"):
+    print(f"{Colors.YELLOW}{message}{Colors.RESET}", end=end)
 
 # EOF
