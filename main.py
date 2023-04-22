@@ -3,12 +3,13 @@ import subprocess
 import os
 
 from getpass import getpass
-from yaml import safe_load
+from yaml    import safe_load
 
 from scripts.pacstrap import pacstrap
 from scripts.drive_utils import Drive, RaidArray
-from scripts.merge_default import Defaults, merge
-from scripts import clock
+from scripts.merge_default import Defaults, fill_defaults
+from scripts.chroot import Chroot
+
 
 ROOT_MOUNTPOINT = "mnt"
 
@@ -16,7 +17,7 @@ program_output = []
 
 
 with open("config.yaml", "r") as config_file:
-    config_options = safe_load(config_file)
+    config_options = fill_defaults(safe_load(config_file), Defaults.PARENT)
 
 
 PARTITION_DISKS    = False
@@ -25,11 +26,13 @@ FORMAT_PARTITIONS  = False
 SETUP_RAID_ARRAYS  = False
 MOUNT_FILESYSTEMS  = False
 PACSTRAP           = False
-INSTALL_PACKAGES   = False
+CHROOT             = True
 CONFIGURE_CLOCK    = True
 CONFIGURE_LOCALES  = False
+CONFIGURE_HOST     = False
 CONFIGURE_USERS    = False
 
+# Default config should be merged with actual config before doing anything else
 
 def sort_by_mountpoint(partition):
     if not partition[1].mountpoint:
@@ -51,8 +54,8 @@ def main():
         devices = {}
 
         for drive in config_options["drives"]:
-            drive_config = merge(config_options["drives"][drive],
-                                 Defaults.DRIVE)
+            drive_config = fill_defaults(config_options["drives"][drive],
+                                         Defaults.DRIVE)
 
             device_path = drive_config["device-path"]
             gpt         = drive_config["gpt"]
@@ -61,8 +64,8 @@ def main():
                                   gpt=gpt)
 
             for uid in drive_config["partitions"]:
-                partition_config = merge(drive_config["partitions"][uid],
-                                         Defaults.PARTITION)
+                partition_config = fill_defaults(drive_config["partitions"][uid],
+                                                 Defaults.PARTITION)
 
                 drives[drive].new_partition(partition_size=partition_config["size"],
                                             start_sector=partition_config["start-sector"],
@@ -101,8 +104,8 @@ def main():
 
     if FORMAT_PARTITIONS:
         for uid in config_options["filesystems"]:
-            filesystem_config = merge(config_options["filesystems"][uid],
-                                      Defaults.FILESYSTEM)
+            filesystem_config = fill_defaults(config_options["filesystems"][uid],
+                                              Defaults.FILESYSTEM)
 
             devices[uid].new_filesystem(filesystem_config["filesystem"],
                                         filesystem_config["label"],
@@ -119,8 +122,26 @@ def main():
     if PACSTRAP:
         pacstrap()
 
-    if CONFIGURE_CLOCK:
-        clock.configure("US/Mountain")
+    if CHROOT:
+        with Chroot() as chroot_env:
+            if CONFIGURE_CLOCK:
+                clock_config = fill_defaults(config_options["clock"],
+                                             Defaults.CLOCK)
+
+                chroot_env.configure_clock(clock_config["timezone"],
+                                           clock_config["hardware-utc"],
+                                           clock_config["enable-ntp"])
+
+            if CONFIGURE_LOCALES:
+                locale_config = fill_defaults(config_options["locales"],
+                                              Defaults.LOCALES)
+
+                chroot_env.configure_locales(locale_config["locale-gen"],
+                                             locale_config["locale-conf"])
+
+            if CONFIGURE_HOST:
+                chroot_env.configure_host(config_options["hostname"])
+        
     
 if __name__ == "__main__":
     main()
