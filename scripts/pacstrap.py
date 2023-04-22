@@ -17,7 +17,7 @@ def pacstrap(target_mountpoint: str="/mnt",
              ):
 
     # Ensure mirrors and keys are up to date
-    update_command = ["pacman", "-Sy", "--noconfirm", "archlinux-keyring"]
+    update_command = ["pacman", "-Sy", "--noconfirm", "--color", "always", "archlinux-keyring"]
     # print(subprocess.run(update_command))
     print(" ".join(update_command))
 
