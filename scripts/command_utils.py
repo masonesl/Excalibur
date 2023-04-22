@@ -11,7 +11,11 @@ STD_CODES = {
 }
 
 
-def execute(command: str, pipe_mode: int=2):
+def execute(command: str, pipe_mode: int=2, dry_run=False):
+    if dry_run:
+        output.info(f"- Executing '{command}'")
+        return
+
     std = {
         "stdout" : None,
         "stderr" : None,
