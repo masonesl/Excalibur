@@ -1,6 +1,8 @@
 import subprocess
 from re import search
 
+import command_utils as cmd
+
 
 # @TODO Add logging
 
@@ -10,7 +12,8 @@ class Formattable:
     FILESYSTEMS = ["efi", "vfat", "ext4", "xfs", "swap"]
 
     def __init__(self, device_path: str,
-                       partition_label: str):
+                       partition_label: str,
+                       dry_run: bool=False):
 
         self.partition_path  = device_path
         self.partition_label = partition_label
@@ -24,15 +27,17 @@ class Formattable:
         self.is_encrypted = False
         self.mapper_path  = None
 
-    def __get_blkid(self, element: str):
-        blkid_command = ["blkid", "-s", element, "-o", "value", self.partition_path]
+        self.dry_run = dry_run
 
-        return subprocess.run(blkid_command, capture_output=True).stdout.decode().strip()
+    def __get_blkid(self, element: str):
+        return cmd.execute(
+            f"blkid -s {element} -o value {self.partition_path}",
+            6).stdout.read().decode().strip()
 
     def new_filesystem(self, filesystem: str,
                              label     : str="",
                              mountpoint: str="",
-                             *options,):
+                             options   : str="",):
 
         if filesystem not in Formattable.FILESYSTEMS:
             print(f"{filesystem} is not a valid filesystem")
@@ -40,24 +45,19 @@ class Formattable:
 
         match filesystem:
             case "efi":
-                mkfs_command = ["mkfs.vfat", "-F32", "-n"]
+                mkfs_command = "mkfs.vfat -F32 -n "
             case "swap":
-                mkfs_command = ["mkswap", "-L"]
+                mkfs_command = "mkswap -L "
             case _:
-                mkfs_command = [f"mkfs.{filesystem}", "-L"]
-
-        # Append filesystem label
-        mkfs_command.append(label)
+                mkfs_command = f"mkfs.{filesystem} -L "
 
         # Append any other command options
         mkfs_command += options
 
         # Specify the block device to format
-        mkfs_command.append(self.partition_path)
+        mkfs_command += f" {self.partition_path}"
 
-        # print(subprocess.run(mkfs_command, capture_output=True))
-
-        print(" ".join(mkfs_command))
+        cmd.execute(mkfs_command, dry_run=self.dry_run)
 
         # Store filesystem information
         self.filesystem = filesystem
@@ -71,30 +71,22 @@ class Formattable:
 
         # @TODO Add option for keyfile
 
-        cryptsetup_format_command = ["cryptsetup", "-q", "luksFormat", self.partition_path]
-        cryptsetup_open_command   = ["cryptsetup", "luksOpen", self.partition_path, mapper_name]
+        cryptsetup_format_command = f"cryptsetup -q luksFormat {self.partition_path}"
+        cryptsetup_open_command   = f"cryptsetup luksOpen {self.partition_path} {mapper_name}"
 
         # Append any additional options to each command
         if "format_options" in options:
             cryptsetup_format_command += options["format_options"]
         if "open_options" in options:
-            cryptsetup_open_command   += options["open_options"]
+            cryptsetup_open_command += options["open_options"]
 
-        # cryptsetup_format = subprocess.Popen(cryptsetup_format_command, stdout=subprocess.PIPE,
-        #                                                                 stdin =subprocess.PIPE,
-        #                                                                 stderr=subprocess.PIPE)
 
-        # print(cryptsetup_format.communicate(input=password.encode()))
+        luksformat_proc = cmd.execute(cryptsetup_format_command, 7, self.dry_run)
+        # luksformat_proc.communicate(password.encode())
 
-        print(" ".join(cryptsetup_format_command))
 
-        # cryptsetup_open = subprocess.Popen(cryptsetup_open_command, stdout=subprocess.PIPE,
-        #                                                             stdin =subprocess.PIPE,
-        #                                                             stderr=subprocess.PIPE)
-
-        # print(cryptsetup_open.communicate(input=password.encode()))
-
-        print(" ".join(cryptsetup_open_command))
+        luksopen_proc = cmd.execute(cryptsetup_open_command, 7, self.dry_run)
+        # luksopen_proc.communicate(password.encode())
 
         self.is_encrypted    = True
         self.real_path       = self.partition_path
@@ -106,16 +98,11 @@ class Formattable:
             case None:
                 return
             case "swap":
-                mount_command = ["swapon", self.partition_path]
+                cmd.execute(f"swapon {self.partition_path}", dry_run=self.dry_run)
             case _:
-                mount_command = ["mount", "-m", self.partition_path]
-                mount_command.append(
-                    override_mount if override_mount else self.mountpoint
-                )
-        
-        # print(subprocess.run(mount_command, capture_output=True))
-
-        print(" ".join(mount_command))
+                cmd.execute(
+                    f"mount -m {self.partition_path} {override_mount if override_mount else self.mountpoint}",
+                    dry_run=self.dry_run)
 
     
 class RaidArray(Formattable):
@@ -123,40 +110,40 @@ class RaidArray(Formattable):
     def __init__(self, devices   : list,
                        array_name: str,
                        level     : int=0,
-                       *options):
+                       options: str="",
+                       dry_run: bool=False):
 
-        mdadm_command = ["mdadm", "--create", "--metadata=1.2"]
+        mdadm_command = f"mdadm --create --metadata=1.2 "
 
         # Set the RAID level
-        mdadm_command.append(f"--level={level}")
+        mdadm_command += f"--level={level} "
 
         # Set the number of RAID devices
-        mdadm_command.append(f"--raid-devices={len(devices)}")
+        mdadm_command += f"--raid-devices={len(devices)} "
 
         # Set the RAID array name
-        mdadm_command.append(f"--name={array_name}")
+        mdadm_command += f"--name={array_name} "
 
         # Set the array to have the same name regardless of host
-        mdadm_command.append("--homehost=any")
-
-        mdadm_command.append(f"/dev/md/{array_name}")
+        mdadm_command += "--homehost=any" 
 
         # Add any additional options to command
         mdadm_command += options
 
+        mdadm_command += f" /dev/md/{array_name} "
+
         # Allow for either devices or partitions to be added to the array
         for device in devices:
             try:
-                mdadm_command.append(device.device_path)
+                mdadm_command += f"{device.device_path} "
             except AttributeError:
-                mdadm_command.append(device.partition_path)
+                mdadm_command += f"{device.partition_path} "
 
-        # print(subprocess.run(mdadm_command, capture_output=True))
-
-        print(" ".join(mdadm_command))
+        cmd.execute(mdadm_command, dry_run=dry_run)
 
         super().__init__(device_path=f"/dev/md/{array_name}", 
-                         partition_label=array_name)
+                         partition_label=array_name,
+                         dry_run=dry_run)
 
 
 class Partition(Formattable):
@@ -167,12 +154,8 @@ class Partition(Formattable):
                        type_code       : str="",
                        partition_label : str="",
                        partition_number: int= 1,
-                       device_path     : str="",):
-
-        sgdisk_command = ["sgdisk"]
-
-        # Partition size command portion
-        sgdisk_command.append("-n")
+                       device_path     : str="",
+                       dry_run         : bool=False):
 
         if partition_size != "0":
             # Allow for specifying size OR start and end sectors
@@ -181,22 +164,20 @@ class Partition(Formattable):
             start_sector = "0"
             end_sector   = f"+{partition_size}"
 
-        sgdisk_command.append(f"{partition_number}:{start_sector}:{end_sector}")
+        sgdisk_command = f"sgdisk -n {partition_number}:{start_sector}:{end_sector} "
 
         # Partition type code command portion
-        sgdisk_command.append("-t")
-        sgdisk_command.append(f"{partition_number}:{type_code}")
+        if type_code:
+            sgdisk_command += f"-t {partition_number}:{type_code} "
 
         # Partition label command portion
-        sgdisk_command.append("-c")
-        sgdisk_command.append(f"{partition_number}:{partition_label}")
+        if partition_label:
+            sgdisk_command += f"-c {partition_number}:'{partition_label}' "
 
         # Specify the drive via its device path
-        sgdisk_command.append(device_path)
+        sgdisk_command += device_path
 
-        # print(subprocess.run(sgdisk_command, capture_output=True))
-
-        print(" ".join(sgdisk_command))
+        cmd.execute(sgdisk_command, dry_run=dry_run)
 
         partition_path = "{path}{sep}{num}".format(
             path=device_path,
@@ -204,7 +185,7 @@ class Partition(Formattable):
             num =partition_number
         )
 
-        super().__init__(partition_path, partition_label)
+        super().__init__(partition_path, partition_label, dry_run=dry_run)
 
 
 class Drive:
@@ -222,7 +203,8 @@ class Drive:
                             partition_size : str="0",
                             type_code      : str="",
                             partition_label: str="",
-                            uid            : str="",):
+                            uid            : str="",
+                            dry_run        : bool=False):
 
         self.number_of_partitions += 1
 
@@ -233,7 +215,8 @@ class Drive:
             type_code,
             partition_label,
             self.number_of_partitions,
-            self.device_path
+            self.device_path,
+            dry_run
         )
 
     def __getitem__(self, uid: str):
