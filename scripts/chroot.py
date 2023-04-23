@@ -77,6 +77,12 @@ class Chroot:
         # root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
         output.info(f": Sending '{root_password}' to passwd")
 
+        # Build a list of groups that exist
+        system_groups = []
+        with open(f"{self.target}/etc/group", "r") as groups_file:
+            for groupline in groups_file.readlines():
+                system_groups.append(groupline.split(":")[0])
+
         for user in users:
             self.__wrap_chroot(f"useradd {user}")
 
@@ -98,6 +104,10 @@ class Chroot:
             
             if groups := users[user]["groups"]:
                 for group in groups:
+                    # Create group if it doesn't exist
+                    if group not in system_groups:
+                        self.__wrap_chroot(f"groupadd {group}")
+
                     self.__wrap_chroot(f"usermod -a -G {group} {user}")
 
             passwd_proc = self.__wrap_chroot(f"passwd {user}", 7)
