@@ -86,12 +86,11 @@ locales:
     - "en_US ISO-8859-1"
     - "dsb_DE UTF-8"
 
-hostname: "onimaru"
+hostname: "excalibur"
 
 users:
   mason:
     shell: "/bin/bash"
     comment: "Mason"
-    home: "/home/mason"
     groups:
       - "wheel"
