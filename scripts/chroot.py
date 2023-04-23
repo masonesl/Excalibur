@@ -74,10 +74,36 @@ class Chroot:
                               users: dict={}):
         
         root_password_proc = self.__wrap_chroot("passwd")
-        root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
+        # root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
+        output.info(f": Sending '{root_password}' to passwd")
 
+        for user in users:
+            self.__wrap_chroot(f"useradd {user}")
 
-        
+            if shell := users[user]["shell"]:
+                # Check to see if the specified shell is installed
+                with open(f"{self.target}/etc/shells", "r") as shells_file:
+                    shell_installed = False
+                    for shell_line in shells_file.readlines()[3:]:
+                        if shell_line.strip() == shell:
+                            shell_installed = True
+
+                    if not shell_installed:
+                        self.__wrap_chroot(f"pacman --noconfirm -S {shell.split('/')[-1]}")
+                        
+                self.__wrap_chroot(f"usermod -s {shell} {user}")
+
+            if comment := users[user]["comment"]:
+                self.__wrap_chroot(f"usermod -c {comment} {user}")
+            
+            if groups := users[user]["groups"]:
+                for group in groups:
+                    self.__wrap_chroot(f"usermod -a -G {group} {user}")
+
+            passwd_proc = self.__wrap_chroot(f"passwd {user}", 7)
+            # passwd_proc.communicate(f"{users[user]['password']}\n{users[user]['password']}".encode())
+            output.info(f": Sending '{users[user]['password']}' to passwd {user}")
+
     def exit(self):
         self.arch_chroot_process.communicate(b"exit")
         output.info(": Exited arch-chroot")
