@@ -25,12 +25,12 @@ with open("config.yaml", "r") as config_file:
     config_options = fill_defaults(safe_load(config_file), Defaults.PARENT)
 
 
-PARTITION_DISKS    = False
-ENCRYPT_PARTITIONS = False
-FORMAT_PARTITIONS  = False
-SETUP_RAID_ARRAYS  = False
-MOUNT_FILESYSTEMS  = False
-PACSTRAP           = False
+PARTITION_DISKS    = True
+ENCRYPT_PARTITIONS = True
+FORMAT_PARTITIONS  = True
+SETUP_RAID_ARRAYS  = True
+MOUNT_FILESYSTEMS  = True
+PACSTRAP           = True
 
 CHROOT             = True
 CONFIGURE_CLOCK    = True
@@ -50,6 +50,19 @@ def sort_by_mountpoint(partition):
         return -1
     else:
         return len(partition[1].mountpoint.split("/"))
+
+
+def get_password(message: str, repeat_message: str):
+    passwords_match = False
+    while not passwords_match:
+        password = getpass(f"{message}: ")
+        if getpass(f"{repeat_message}: ") == password:
+            passwords_match = True
+        else:
+            print("Passwords do not match.")
+
+    return password
+
 
 def main():
     # Make sure that the mountpoint directory exists and create it if is doesn't
@@ -79,7 +92,8 @@ def main():
                                             end_sector=partition_config["end-sector"],
                                             type_code=partition_config["type-code"],
                                             partition_label=partition_config["partition-label"],
-                                            uid=uid)
+                                            uid=uid,
+                                            dry_run=True)
 
                 devices[uid] = drives[drive][uid]
 
@@ -93,19 +107,15 @@ def main():
             
             devices[uid] = RaidArray(devices=raid_devices,
                                      array_name=raid_config["array-name"],
-                                     level=raid_config["level"])
+                                     level=raid_config["level"],
+                                     dry_run=True)
 
     if ENCRYPT_PARTITIONS:
         for uid in config_options["crypt"]:
             crypt_config = config_options["crypt"][uid]
 
-            passwords_match = False
-            while not passwords_match:
-                password = getpass(f"Set password for {uid}: ")
-                if getpass(f"Repeat password for {uid}: ") == password:
-                    passwords_match = True
-                else:
-                    print("Passwords do not match.")
+            password = get_password(f"Set encryption password for {devices[uid].partition_label}",
+                                    f"Repeat password for {devices[uid].partition_label}")
 
             devices[uid].encrypt_partition(password, crypt_config["crypt-label"])
 
@@ -119,15 +129,13 @@ def main():
                                         filesystem_config["mountpoint"])
 
         sorted_devices = dict(sorted(devices.items(), key=sort_by_mountpoint))
-        print(devices)
-        print(sorted_devices)
 
     if MOUNT_FILESYSTEMS:
         for uid in sorted_devices:
             devices[uid].mount_filesystem(f"/mnt{devices[uid].mountpoint}")
 
     if PACSTRAP:
-        pacstrap()
+        pacstrap(dry_run=True)
 
     if CHROOT:
         command.execute("./mnt/etc/reset.sh")
@@ -152,6 +160,18 @@ def main():
             
             if CONFIGURE_HOSTNAME:
                 chroot_env.set_hostname(config_options["hostname"])
+
+            if CONFIGURE_USERS:
+                root_password = get_password("Set password for root",
+                                             "Repeat password for root")
+
+                for user in config_options["users"]:
+                    config_options["users"][user]["password"] = get_password(
+                        f"Set password for {user}",
+                        f"Repeat password for {user}"
+                    )
+
+                chroot_env.configure_users(root_password, config_options["users"])
 
         
     
