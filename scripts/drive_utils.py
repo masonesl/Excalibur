@@ -1,4 +1,3 @@
-import subprocess
 from re import search
 
 import command_utils as cmd

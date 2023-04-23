@@ -1,4 +1,3 @@
-import subprocess
 # import logging
 import os
 import sys
@@ -39,9 +38,16 @@ CONFIGURE_HOSTS    = True
 CONFIGURE_HOSTNAME = True
 CONFIGURE_USERS    = True
 
-# Default config should be merged with actual config before doing anything else
 
 def sort_by_mountpoint(partition):
+    """
+    Return -1 if partition does not have a mountpoint
+
+    Return 0 if mountpoint is / to ensure that it is mounted before anything else
+
+    Return the length of of the mountpoint separated by / to ensure
+    that shorter paths will be mounted first
+    """
     if not partition[1].mountpoint:
         return -1
     elif partition[1].mountpoint == "/":
@@ -177,3 +183,5 @@ def main():
     
 if __name__ == "__main__":
     main()
+
+# EOF

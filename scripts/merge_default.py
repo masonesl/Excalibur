@@ -46,6 +46,12 @@ class Defaults(Enum):
         "locale-conf" : "en_US.UTF-8"
     }
 
+    USER = {
+        "shell" : "/bin/bash",
+        "comment" : "",
+        "groups" : []
+    }
+
 
 def fill_defaults(config: dict, default_config: Defaults) -> dict:
     default_config = default_config.value
