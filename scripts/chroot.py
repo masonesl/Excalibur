@@ -9,7 +9,7 @@ class Chroot:
         # Each command ran will be run with its own chroot subprocess
         # This probably isn't the best way to do it so it might be changed later
 
-        self.arch_chroot_process = cmd.execute("bash", 5)
+        self.arch_chroot_process = cmd.execute(f"arch-chroot {target_mountpoint}", 5, dry_run, False)
         output.info(": Started arch-chroot")
 
         self.target = target_mountpoint
@@ -75,7 +75,6 @@ class Chroot:
         
         root_password_proc = self.__wrap_chroot("passwd")
         # root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
-        output.info(f": Sending '{root_password}' to passwd")
 
         # Build a list of groups that exist
         system_groups = []
@@ -112,7 +111,6 @@ class Chroot:
 
             passwd_proc = self.__wrap_chroot(f"passwd {user}", 7)
             # passwd_proc.communicate(f"{users[user]['password']}\n{users[user]['password']}".encode())
-            output.info(f": Sending '{users[user]['password']}' to passwd {user}")
 
     def exit(self):
         self.arch_chroot_process.communicate(b"exit")
