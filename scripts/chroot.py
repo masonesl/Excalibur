@@ -6,9 +6,12 @@ class Chroot:
     def __init__(self, target_mountpoint: str="/mnt", dry_run=False):
         # Mount all temporary API filesystems
         cmd.execute(f"mount -t proc /proc {target_mountpoint}/proc/", dry_run=dry_run)
-        cmd.execute(f"mount -t sysfs /sys {target_mountpoint}/sys/", dry_run=dry_run)
+        cmd.execute(f"mount --rbind /sys {target_mountpoint}/sys/", dry_run=dry_run)
+        cmd.execute(f"mount --make-rslave {target_mountpoint}/sys/", dry_run=dry_run)
         cmd.execute(f"mount --rbind /dev {target_mountpoint}/dev/", dry_run=dry_run)
+        cmd.execute(f"mount --make-rslave {target_mountpoint}/dev/", dry_run=dry_run)
         cmd.execute(f"mount --rbind /run {target_mountpoint}/run/", dry_run=dry_run)
+        cmd.execute(f"mount --make-slave {target_mountpoint}/run/", dry_run=dry_run)
 
         # Mount EFI variables for UEFI bootloader configuration
         cmd.execute(
@@ -24,8 +27,8 @@ class Chroot:
     def __enter__(self):
         return self
 
-    def __wrap_chroot(self, command, std_code: int=3):
-        return cmd.execute(f"chroot {self.target} sh -c '{command}'", std_code, self.dry_run)
+    def __wrap_chroot(self, command, std_code: int=3, wait_for_proc=True):
+        return cmd.execute(f"chroot {self.target} sh -c '{command}'", std_code, self.dry_run, wait_for_proc)
 
     def configure_clock(self, timezone: str="",
                               hardware_utc: bool=True,
@@ -78,7 +81,7 @@ class Chroot:
     def configure_users(self, root_password: str="",
                               users: dict={}):
         
-        root_password_proc = self.__wrap_chroot("passwd")
+        root_password_proc = self.__wrap_chroot("passwd", 7, wait_for_proc=False)
         if not self.dry_run:
             root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
 
@@ -115,18 +118,18 @@ class Chroot:
 
                     self.__wrap_chroot(f"usermod -a -G {group} {user}")
 
-            passwd_proc = self.__wrap_chroot(f"passwd {user}", 7)
+            passwd_proc = self.__wrap_chroot(f"passwd {user}", 7, wait_for_proc=False)
             if not self.dry_run:
                 passwd_proc.communicate(
                     f"{users[user]['password']}\n{users[user]['password']}".encode())
 
     def exit(self):
         # Unmount all API filesystems from new root
-        cmd.execute(f"umount {self.target}/proc/", dry_run=self.dry_run)
-        cmd.execute(f"umount {self.target}/sys/", dry_run=self.dry_run)
-        cmd.execute(f"umount {self.target}/dev/", dry_run=self.dry_run)
-        cmd.execute(f"umount {self.target}/run/", dry_run=self.dry_run)
-        cmd.execute(f"umount {self.target}/sys/firmware/efi/efivars", dry_run=self.dry_run)
+        cmd.execute(f"umount -R {self.target}/proc/", dry_run=self.dry_run)
+        cmd.execute(f"umount -R {self.target}/sys/", dry_run=self.dry_run)
+        cmd.execute(f"umount -R {self.target}/dev/", dry_run=self.dry_run)
+        cmd.execute(f"umount -R {self.target}/run/", dry_run=self.dry_run)
+        cmd.execute(f"umount -R {self.target}/sys/firmware/efi/efivars", dry_run=self.dry_run)
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.exit()
