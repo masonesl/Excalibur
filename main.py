@@ -16,7 +16,8 @@ import scripts.command_utils as command
 import scripts.output_utils  as output
 
 
-ROOT_MOUNTPOINT = "mnt"
+NEWROOT_MOUNTPOINT = "mnt"
+DRY_RUN            = True
 
 program_output = []
 
@@ -73,8 +74,8 @@ def get_password(message: str, repeat_message: str):
 
 def main():
     # Make sure that the mountpoint directory exists and create it if is doesn't
-    if not os.path.exists(ROOT_MOUNTPOINT):
-        os.mkdir(ROOT_MOUNTPOINT)
+    if not os.path.exists(NEWROOT_MOUNTPOINT):
+        os.mkdir(NEWROOT_MOUNTPOINT)
     
     if PARTITION_DISKS:
         output.info(": Partitioning drives")
@@ -102,7 +103,7 @@ def main():
                                             type_code=partition_config["type-code"],
                                             partition_label=partition_config["partition-label"],
                                             uid=uid,
-                                            dry_run=True)
+                                            dry_run=DRY_RUN)
 
                 devices[uid] = drives[drive][uid]
 
@@ -119,7 +120,7 @@ def main():
             devices[uid] = RaidArray(devices=raid_devices,
                                      array_name=raid_config["array-name"],
                                      level=raid_config["level"],
-                                     dry_run=True)
+                                     dry_run=DRY_RUN)
 
     if ENCRYPT_PARTITIONS:
         output.info(": Encrypting partitions")
@@ -154,11 +155,11 @@ def main():
     if PACSTRAP:
         output.info(": Running pacstrap")
 
-        pacstrap(dry_run=True)
+        pacstrap(dry_run=DRY_RUN)
 
     if CHROOT:
         command.execute("./mnt/etc/reset.sh")
-        with Chroot(target_mountpoint="mnt", dry_run=True) as chroot_env:
+        with Chroot(target_mountpoint=NEWROOT_MOUNTPOINT, dry_run=DRY_RUN) as chroot_env:
             if CONFIGURE_CLOCK:
                 output.info(": Configuring clock")
 
