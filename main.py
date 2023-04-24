@@ -13,6 +13,7 @@ from scripts.merge_default import Defaults, fill_defaults
 from scripts.chroot import Chroot
 
 import scripts.command_utils as command
+import scripts.output_utils  as output
 
 
 ROOT_MOUNTPOINT = "mnt"
@@ -76,6 +77,8 @@ def main():
         os.mkdir(ROOT_MOUNTPOINT)
     
     if PARTITION_DISKS:
+        output.info(": Partitioning drives")
+
         drives = {}
         devices = {}
 
@@ -104,6 +107,8 @@ def main():
                 devices[uid] = drives[drive][uid]
 
     if SETUP_RAID_ARRAYS:
+        output.info(": Creating RAID arrays")
+
         for uid in config_options["raid"]:
             raid_config = config_options["raid"][uid]
             raid_devices = []
@@ -117,6 +122,8 @@ def main():
                                      dry_run=True)
 
     if ENCRYPT_PARTITIONS:
+        output.info(": Encrypting partitions")
+
         for uid in config_options["crypt"]:
             crypt_config = config_options["crypt"][uid]
 
@@ -126,6 +133,8 @@ def main():
             devices[uid].encrypt_partition(password, crypt_config["crypt-label"])
 
     if FORMAT_PARTITIONS:
+        output.info(": Creating filesystems")
+
         for uid in config_options["filesystems"]:
             filesystem_config = fill_defaults(config_options["filesystems"][uid],
                                               Defaults.FILESYSTEM)
@@ -137,16 +146,22 @@ def main():
         sorted_devices = dict(sorted(devices.items(), key=sort_by_mountpoint))
 
     if MOUNT_FILESYSTEMS:
+        output.info(": Mounting filesystems")
+
         for uid in sorted_devices:
             devices[uid].mount_filesystem(f"/mnt{devices[uid].mountpoint}")
 
     if PACSTRAP:
+        output.info(": Running pacstrap")
+
         pacstrap(dry_run=True)
 
     if CHROOT:
         command.execute("./mnt/etc/reset.sh")
         with Chroot(target_mountpoint="mnt", dry_run=True) as chroot_env:
             if CONFIGURE_CLOCK:
+                output.info(": Configuring clock")
+
                 clock_config = fill_defaults(config_options["clock"],
                                              Defaults.CLOCK)
 
@@ -155,6 +170,8 @@ def main():
                                            clock_config["enable-ntp"])
 
             if CONFIGURE_LOCALES:
+                output.info(": Configuring locales")
+
                 locale_config = fill_defaults(config_options["locales"],
                                               Defaults.LOCALES)
 
@@ -162,12 +179,18 @@ def main():
                                              locale_config["locale-conf"])
 
             if CONFIGURE_HOSTS:
+                output.info(": Configuring hosts")
+
                 chroot_env.configure_hosts()
             
             if CONFIGURE_HOSTNAME:
+                output.info(": Setting hostname")
+
                 chroot_env.set_hostname(config_options["hostname"])
 
             if CONFIGURE_USERS:
+                output.info(": Configuring users")
+
                 root_password = get_password("Set password for root",
                                              "Repeat password for root")
 
@@ -178,7 +201,6 @@ def main():
                     )
 
                 chroot_env.configure_users(root_password, config_options["users"])
-
         
     
 if __name__ == "__main__":
