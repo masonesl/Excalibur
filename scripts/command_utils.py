@@ -11,9 +11,9 @@ STD_CODES = {
 }
 
 
-def execute(command: str, pipe_mode: int=2, dry_run=False):
+def execute(command: str, pipe_mode: int=2, dry_run=False, wait_for_proc=True):
     if dry_run:
-        output.info(f"- Executing '{command}'")
+        output.info(f"- {command} -")
         return
 
     std = {
@@ -32,9 +32,13 @@ def execute(command: str, pipe_mode: int=2, dry_run=False):
                                       stdin =std["stdin"])
     
     # If there are any errors, print them and exit with a non-zero return code
-    if std["stderr"] and (errors := process.stderr.readlines()):
+    if std["stderr"] and process.poll() and (errors := process.stderr.readlines()):
         for eline in errors:
+            output.error(f"{command} failed")
             output.error(f":: {eline.decode()}", end="")
+
+    if wait_for_proc:
+        return process.communicate()
 
     return process
 
