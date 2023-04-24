@@ -25,7 +25,7 @@ class Chroot:
         return self
 
     def __wrap_chroot(self, command, std_code: int=3):
-        return cmd.execute(f"chroot {self.target} "+command, std_code, self.dry_run)
+        return cmd.execute(f"chroot {self.target} sh -c '{command}'", std_code, self.dry_run)
 
     def configure_clock(self, timezone: str="",
                               hardware_utc: bool=True,
@@ -79,7 +79,8 @@ class Chroot:
                               users: dict={}):
         
         root_password_proc = self.__wrap_chroot("passwd")
-        # root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
+        if not self.dry_run:
+            root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
 
         # Build a list of groups that exist
         system_groups = []
@@ -115,7 +116,9 @@ class Chroot:
                     self.__wrap_chroot(f"usermod -a -G {group} {user}")
 
             passwd_proc = self.__wrap_chroot(f"passwd {user}", 7)
-            # passwd_proc.communicate(f"{users[user]['password']}\n{users[user]['password']}".encode())
+            if not self.dry_run:
+                passwd_proc.communicate(
+                    f"{users[user]['password']}\n{users[user]['password']}".encode())
 
     def exit(self):
         # Unmount all API filesystems from new root
