@@ -4,16 +4,21 @@ import output_utils  as output
 class Chroot:
 
     def __init__(self, target_mountpoint: str="/mnt", dry_run=False):
-        # Start an arch-chroot process to mount everything correctly
-        # Running commands on the new root won't be done through arch-chroot
-        # Each command ran will be run with its own chroot subprocess
-        # This probably isn't the best way to do it so it might be changed later
+        # Mount all temporary API filesystems
+        cmd.execute(f"mount -t proc /proc {target_mountpoint}/proc/", dry_run=dry_run)
+        cmd.execute(f"mount -t sysfs /sys {target_mountpoint}/sys/", dry_run=dry_run)
+        cmd.execute(f"mount --rbind /dev {target_mountpoint}/dev/", dry_run=dry_run)
+        cmd.execute(f"mount --rbind /run {target_mountpoint}/run/", dry_run=dry_run)
 
-        self.arch_chroot_process = cmd.execute(f"arch-chroot {target_mountpoint}", 5, dry_run, False)
-        output.info(": Started arch-chroot")
+        # Mount EFI variables for UEFI bootloader configuration
+        cmd.execute(
+            f"mount --rbind /sys/firmware/efi/efivars {target_mountpoint}/sys/firmware/efi/efivars",
+            dry_run=dry_run)
 
-        self.target = target_mountpoint
+        # Copy DNS details to new root
+        cmd.execute(f"cp /etc/resolv.conf {target_mountpoint}/etc/resolv.conf", dry_run=dry_run)
 
+        self.target  = target_mountpoint
         self.dry_run = dry_run
 
     def __enter__(self):
@@ -113,8 +118,12 @@ class Chroot:
             # passwd_proc.communicate(f"{users[user]['password']}\n{users[user]['password']}".encode())
 
     def exit(self):
-        self.arch_chroot_process.communicate(b"exit")
-        output.info(": Exited arch-chroot")
+        # Unmount all API filesystems from new root
+        cmd.execute(f"umount {self.target}/proc/", dry_run=self.dry_run)
+        cmd.execute(f"umount {self.target}/sys/", dry_run=self.dry_run)
+        cmd.execute(f"umount {self.target}/dev/", dry_run=self.dry_run)
+        cmd.execute(f"umount {self.target}/run/", dry_run=self.dry_run)
+        cmd.execute(f"umount {self.target}/sys/firmware/efi/efivars", dry_run=self.dry_run)
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.exit()
