@@ -1,6 +1,7 @@
 from re import search
 
 import command_utils as cmd
+import output_utils  as output
 
 
 # @TODO Add logging
@@ -39,7 +40,7 @@ class Formattable:
                              options   : str="",):
 
         if filesystem not in Formattable.FILESYSTEMS:
-            print(f"{filesystem} is not a valid filesystem")
+            output.warn(f"{filesystem} is not a valid filesystem")
             exit(1)
 
         match filesystem:
