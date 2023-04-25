@@ -26,19 +26,22 @@ with open("config.yaml", "r") as config_file:
     config_options = fill_defaults(safe_load(config_file), Defaults.PARENT)
 
 
-PARTITION_DISKS    = True
-ENCRYPT_PARTITIONS = True
-FORMAT_PARTITIONS  = True
-SETUP_RAID_ARRAYS  = True
-MOUNT_FILESYSTEMS  = True
-PACSTRAP           = True
-
-CHROOT             = True
-CONFIGURE_CLOCK    = True
-CONFIGURE_LOCALES  = True
-CONFIGURE_HOSTS    = True
-CONFIGURE_HOSTNAME = True
-CONFIGURE_USERS    = True
+PARTITION_DISKS       = False
+ENCRYPT_PARTITIONS    = False
+FORMAT_PARTITIONS     = False
+SETUP_RAID_ARRAYS     = False
+MOUNT_FILESYSTEMS     = False
+PACSTRAP              = False
+  
+CHROOT                = True
+CONFIGURE_CLOCK       = False
+CONFIGURE_LOCALES     = False
+CONFIGURE_HOSTS       = False
+CONFIGURE_HOSTNAME    = False
+CONFIGURE_USERS       = False
+CONFIGURE_CRYPT       = True
+CONFIGURE_EARLY_CRYPT = True
+CONFIGURE_INITRAMFS   = False
 
 
 def sort_by_mountpoint(partition):
@@ -202,6 +205,10 @@ def main():
                     )
 
                 chroot_env.configure_users(root_password, config_options["users"])
+
+            if CONFIGURE_CRYPT:
+                if CONFIGURE_EARLY_CRYPT:
+                    chroot_env.configure_early_crypt()
         
     
 if __name__ == "__main__":
