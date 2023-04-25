@@ -21,6 +21,7 @@ class Chroot:
         # Copy DNS details to new root
         cmd.execute(f"cp /etc/resolv.conf {target_mountpoint}/etc/resolv.conf", dry_run=dry_run)
 
+        self.kernel_parameters = ""
         self.target  = target_mountpoint
         self.dry_run = dry_run
 
@@ -122,6 +123,18 @@ class Chroot:
             if not self.dry_run:
                 passwd_proc.communicate(
                     f"{users[user]['password']}\n{users[user]['password']}".encode())
+
+    def configure_early_crypt(self, crypt_uuid: str="", crypt_label: str=""):
+        with open(f"{self.target}/etc/mkinitcpio.conf", "r") as initrd_conf_file:
+            initrd_conf_data = initrd_conf_file.read()
+
+        with open(f"{self.target}/etc/mkinitcpio.conf", "w") as initrd_conf_file:
+            initrd_conf_file.write(initrd_conf_data.replace("block", "block encrypt"))
+
+        self.kernel_parameters += f"cryptdevice=UUID={crypt_uuid}:{crypt_label}"
+
+    def generate_initramfs(self):
+        self.__wrap_chroot("mkinitcpio -P")
 
     def exit(self):
         # Unmount all API filesystems from new root
