@@ -3,13 +3,13 @@ from re import search
 import command_utils as cmd
 import output_utils  as output
 
-
-# @TODO Add logging
-
+#------------------------------------------------------------------------------
 
 class Formattable:
 
     FILESYSTEMS = ["efi", "vfat", "ext4", "xfs", "swap"]
+
+    #--------------------------------------------------------------------------
 
     def __init__(self, device_path: str,
                        partition_label: str,
@@ -31,10 +31,13 @@ class Formattable:
 
         self.dry_run = dry_run
 
+    #--------------------------------------------------------------------------
+
     def __get_blkid(self, element: str):
         return cmd.execute(
-            f"blkid -s {element} -o value {self.partition_path}",
-            6)[0].decode().strip()
+            f"blkid -s {element} -o value {self.partition_path}", 6)[0].decode().strip()
+
+    #--------------------------------------------------------------------------
 
     def new_filesystem(self, filesystem: str,
                              label     : str="",
@@ -69,6 +72,8 @@ class Formattable:
         self.mountpoint = mountpoint
         self.uuid       = self.__get_blkid("UUID")
 
+    #--------------------------------------------------------------------------
+
     def encrypt_partition(self, password   : str,
                                 mapper_name: str,
                                 **options,):
@@ -100,6 +105,8 @@ class Formattable:
         self.encrypt_uuid    = self.__get_blkid("UUID")
         self.encrypt_label   = mapper_name
 
+    #--------------------------------------------------------------------------
+
     def mount_filesystem(self, override_mount=""):
         match self.filesystem:
             case None:
@@ -111,7 +118,8 @@ class Formattable:
                     f"mount -m {self.partition_path} {override_mount if override_mount else self.mountpoint}",
                     dry_run=self.dry_run)
 
-    
+#------------------------------------------------------------------------------    
+
 class RaidArray(Formattable):
 
     def __init__(self, devices   : list,
@@ -152,6 +160,7 @@ class RaidArray(Formattable):
                          partition_label=array_name,
                          dry_run=dry_run)
 
+#------------------------------------------------------------------------------
 
 class Partition(Formattable):
 
@@ -194,6 +203,7 @@ class Partition(Formattable):
 
         super().__init__(partition_path, partition_label, dry_run=dry_run)
 
+#------------------------------------------------------------------------------
 
 class Drive:
 
@@ -204,6 +214,8 @@ class Drive:
         self.is_gpt      = gpt
 
         self.partitions = {}
+
+    #--------------------------------------------------------------------------
 
     def new_partition(self, start_sector   : str="0",
                             end_sector     : str="0",
@@ -226,7 +238,10 @@ class Drive:
             dry_run
         )
 
+    #--------------------------------------------------------------------------
+
     def __getitem__(self, uid: str):
         return self.partitions[uid]
+
 
 # EOF

@@ -1,6 +1,8 @@
 import command_utils as cmd
 import output_utils  as output
 
+#------------------------------------------------------------------------------
+
 class Chroot:
 
     def __init__(self, target_mountpoint: str="/mnt", dry_run=False):
@@ -25,13 +27,36 @@ class Chroot:
         self.target  = target_mountpoint
         self.dry_run = dry_run
 
+    #--------------------------------------------------------------------------
+
     def __enter__(self):
         return self
 
-    def __wrap_chroot(self, command, std_code: int=3, wait_for_proc=True):
-        return cmd.execute(f"chroot {self.target} sh -c '{command}'", std_code, self.dry_run, wait_for_proc)
+    #--------------------------------------------------------------------------
 
-    def __add_hook(self, preceding_hook, hook):
+    def __wrap_chroot(self, command: str, pipe_mode: int=3, wait_for_proc=True):
+        """Execute a command in the chroot environment
+
+        Args:
+            command (str): Command to be executed
+            pipe_mode (int, optional): Octal code to specify which data streams to set to subprocess.PIPE. Defaults to 3.
+            wait_for_proc (bool, optional): Whether or not to wait for the command to finish executing. Defaults to True.
+
+        Returns:
+            tuple: If wait_for_proc is True
+            subprocess.Popen: If wait_for_proc is False
+        """
+        return cmd.execute(f"chroot {self.target} sh -c '{command}'", pipe_mode, self.dry_run, wait_for_proc)
+
+    #--------------------------------------------------------------------------
+
+    def __add_hook(self, preceding_hook: str, hook: str):
+        """Add a hook to /etc/mkinitcpio.conf
+
+        Args:
+            preceding_hook (str): The hook directly before the hook you want to add
+            hook (str): The hook you want to add
+        """
         with open(f"{self.target}/etc/mkinitcpio.conf", "r") as initrd_conf_file:
             initrd_conf_data = initrd_conf_file.read()
 
