@@ -24,8 +24,10 @@ class Formattable:
         self.mountpoint = None
         self.uuid       = None
 
-        self.is_encrypted = False
-        self.mapper_path  = None
+        self.is_encrypted  = False
+        self.mapper_path   = None
+        self.encrypt_uuid  = None
+        self.encrypt_label = None
 
         self.dry_run = dry_run
 
@@ -83,17 +85,20 @@ class Formattable:
             cryptsetup_open_command += options["open_options"]
 
 
-        luksformat_proc = cmd.execute(cryptsetup_format_command, 7, self.dry_run)
-        # luksformat_proc.communicate(password.encode())
+        luksformat_proc = cmd.execute(cryptsetup_format_command, 7, self.dry_run, False)
+        if not self.dry_run:
+            luksformat_proc.communicate(password.encode())
 
 
-        luksopen_proc = cmd.execute(cryptsetup_open_command, 7, self.dry_run)
-        # luksopen_proc.communicate(password.encode())
+        luksopen_proc = cmd.execute(cryptsetup_open_command, 7, self.dry_run, False)
+        if not self.dry_run:
+            luksopen_proc.communicate(password.encode())
 
         self.is_encrypted    = True
         self.real_path       = self.partition_path
         self.partition_path  = f"/dev/mapper/{mapper_name}"
         self.encrypt_uuid    = self.__get_blkid("UUID")
+        self.encrypt_label   = mapper_name
 
     def mount_filesystem(self, override_mount=""):
         match self.filesystem:
