@@ -31,6 +31,15 @@ class Chroot:
     def __wrap_chroot(self, command, std_code: int=3, wait_for_proc=True):
         return cmd.execute(f"chroot {self.target} sh -c '{command}'", std_code, self.dry_run, wait_for_proc)
 
+    def __add_hook(self, preceding_hook, hook):
+        with open(f"{self.target}/etc/mkinitcpio.conf", "r") as initrd_conf_file:
+            initrd_conf_data = initrd_conf_file.read()
+
+        with open(f"{self.target}/etc/mkinitcpio.conf", "w") as initrd_conf_file:
+            initrd_conf_file.write(initrd_conf_data.replace(
+                preceding_hook, f"{preceding_hook} {hook}"
+            ))
+
     def configure_clock(self, timezone: str="",
                               hardware_utc: bool=True,
                               enable_ntp: bool=True):
@@ -124,14 +133,21 @@ class Chroot:
                 passwd_proc.communicate(
                     f"{users[user]['password']}\n{users[user]['password']}".encode())
 
-    def configure_early_crypt(self, crypt_uuid: str="", crypt_label: str=""):
-        with open(f"{self.target}/etc/mkinitcpio.conf", "r") as initrd_conf_file:
-            initrd_conf_data = initrd_conf_file.read()
+    def configure_early_crypt(self, encrypted_block):
+        crypt_uuid  = encrypted_block.uuid
+        crypt_label = encrypted_block.encrypt_label
 
-        with open(f"{self.target}/etc/mkinitcpio.conf", "w") as initrd_conf_file:
-            initrd_conf_file.write(initrd_conf_data.replace("block", "block encrypt"))
+        self.__add_hook("block", "encrypt")
 
         self.kernel_parameters += f"cryptdevice=UUID={crypt_uuid}:{crypt_label}"
+
+    def configure_raid(self, raid_array):
+        raid_conf = cmd.execute("mdadm --detail --scan", 6, self.dry_run)
+        if not self.dry_run:
+            with open(f"{self.target}/etc/mdadm.conf", "a") as mdadm_conf_file:
+                mdadm_conf_file.write(raid_conf[0].decode())
+
+        self.__add_hook("block", "mdadm_udev")
 
     def generate_initramfs(self):
         self.__wrap_chroot("mkinitcpio -P")
