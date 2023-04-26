@@ -57,8 +57,10 @@ raid:
 crypt:
   swap:
     crypt-label: "CRYPTSWAP"
+    early: true
   home:
     crypt-label: "CRYPTHOME"
+    generate-keyfile: true
 
 filesystems:
   efi:
