@@ -26,11 +26,11 @@ with open("config.yaml", "r") as config_file:
     config_options = fill_defaults(safe_load(config_file), Defaults.PARENT)
 
 
-PARTITION_DISKS       = False
-ENCRYPT_PARTITIONS    = False
-FORMAT_PARTITIONS     = False
-SETUP_RAID_ARRAYS     = False
-MOUNT_FILESYSTEMS     = False
+PARTITION_DISKS       = True
+ENCRYPT_PARTITIONS    = True
+FORMAT_PARTITIONS     = True
+SETUP_RAID_ARRAYS     = True
+MOUNT_FILESYSTEMS     = True
 PACSTRAP              = False
   
 CHROOT                = True
@@ -40,7 +40,8 @@ CONFIGURE_HOSTS       = False
 CONFIGURE_HOSTNAME    = False
 CONFIGURE_USERS       = False
 CONFIGURE_CRYPT       = True
-CONFIGURE_EARLY_CRYPT = True
+CONFIGURE_EARLY_CRYPT = False
+CONFIGURE_RAID        = False
 CONFIGURE_INITRAMFS   = False
 
 
@@ -113,6 +114,8 @@ def main():
     if SETUP_RAID_ARRAYS:
         output.info(": Creating RAID arrays")
 
+        raid_devices = {}
+
         for uid in config_options["raid"]:
             raid_config = config_options["raid"][uid]
             raid_devices = []
@@ -125,8 +128,13 @@ def main():
                                      level=raid_config["level"],
                                      dry_run=DRY_RUN)
 
+            raid_devices[uid] = devices[uid]
+
     if ENCRYPT_PARTITIONS:
         output.info(": Encrypting partitions")
+
+        late_crypt_devices = {}
+        early_crypt_device = None
 
         for uid in config_options["crypt"]:
             crypt_config = config_options["crypt"][uid]
@@ -135,6 +143,11 @@ def main():
                                     f"Repeat password for {devices[uid].partition_label}")
 
             devices[uid].encrypt_partition(password, crypt_config["crypt-label"])
+
+            if "load-early" in crypt_config and crypt_config["load-early"]:
+                early_crypt_device = devices[uid]
+            else:
+                late_crypt_devices[uid] = devices[uid]
 
     if FORMAT_PARTITIONS:
         output.info(": Creating filesystems")
@@ -208,7 +221,10 @@ def main():
 
             if CONFIGURE_CRYPT:
                 if CONFIGURE_EARLY_CRYPT:
-                    chroot_env.configure_early_crypt()
+                    chroot_env.configure_early_crypt(devices["swap"])
+            
+            if CONFIGURE_RAID:
+                chroot_env.configure_raid(devices["root"])
         
     
 if __name__ == "__main__":
