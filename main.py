@@ -16,11 +16,13 @@ import scripts.command_utils as cmd
 import scripts.output_utils  as output
 
 #------------------------------------------------------------------------------
+# These are mainly used for testing
 
 NEWROOT_MOUNTPOINT = "mnt"
 DRY_RUN            = True
 
 #------------------------------------------------------------------------------
+# Load the config file and fill unspecified information with defaults
 
 with open("config.yaml", "r") as config_file:
     config_options = fill_defaults(safe_load(config_file), Defaults.PARENT)
@@ -42,10 +44,14 @@ CONFIGURE_HOSTNAME    = False
 CONFIGURE_USERS       = False
 CONFIGURE_CRYPT       = True
 CONFIGURE_EARLY_CRYPT = False
+CONFIGURE_LATE_CRYPT  = False
 CONFIGURE_RAID        = False
 CONFIGURE_INITRAMFS   = False
 
 #------------------------------------------------------------------------------
+# This function will be used as a key for sorting by mountpoint length to ensure
+# that filesystems are mounted in the correct order.
+# ie. /home should be mounted before /home/bob
 
 def sort_by_mountpoint(partition):
     """
@@ -260,14 +266,9 @@ def main():
             
             if CONFIGURE_RAID:
                 chroot_env.configure_raid(devices["root"])
-
-    devices_pickle = pickle.dumps(devices)
-    
-    unloaded_devices = pickle.loads(devices_pickle)
-    for device in unloaded_devices:
-        print(unloaded_devices[device].__dict__)
         
-    
+#------------------------------------------------------------------------------
+
 if __name__ == "__main__":
     main()
 
