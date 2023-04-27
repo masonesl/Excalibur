@@ -11,9 +11,9 @@ class Formattable:
 
     #--------------------------------------------------------------------------
 
-    def __init__(self, device_path: str,
+    def __init__(self, device_path    : str,
                        partition_label: str,
-                       dry_run: bool=False):
+                       dry_run        : bool=False):
 
         self.partition_path  = device_path
         self.partition_label = partition_label
@@ -24,7 +24,7 @@ class Formattable:
         self.mountpoint = None
         self.uuid       = None
 
-        self.is_encrypted  = False
+        self.uses_keyfile  = False
         self.mapper_path   = None
         self.encrypt_uuid  = None
         self.encrypt_label = None
@@ -76,30 +76,37 @@ class Formattable:
 
     def encrypt_partition(self, password   : str,
                                 mapper_name: str,
+                                keyfile    : bool=True,
                                 **options,):
 
-        # @TODO Add option for keyfile
+        if "format-options" not in options:
+            options["format-options"] = ""
+        if "open-options" not in options:
+            options["open-options"] = ""
 
-        cryptsetup_format_command = f"cryptsetup -q luksFormat {self.partition_path}"
-        cryptsetup_open_command   = f"cryptsetup luksOpen {self.partition_path} {mapper_name}"
+        if keyfile:
+            # Create the keyfile in /tmp
+            cmd.execute(f"dd bs=512 count=4 if=/dev/random of=/tmp/{mapper_name}.key iflag=fullblock")
 
-        # Append any additional options to each command
-        if "format_options" in options:
-            cryptsetup_format_command += options["format_options"]
-        if "open_options" in options:
-            cryptsetup_open_command += options["open_options"]
+            cryptsetup_format_command = f"cryptsetup --key-file /root/ramfs/{mapper_name}.key -q"
+            cryptsetup_open_command   = f"cryptsetup --key-file /root/ramfs/{mapper_name}.key"
+            
+            self.uses_keyfile = True
+        else:
+            cryptsetup_format_command = "cryptsetup -q"
+            cryptsetup_open_command   = "cryptsetup"
 
+        cryptsetup_format_command += f" {options['format-options']} luksFormat {self.partition_path}"
+        cryptsetup_open_command   += f" {options['open-options']} luksOpen {self.partition_path} {mapper_name}"
 
         luksformat_proc = cmd.execute(cryptsetup_format_command, 7, self.dry_run, False)
         if not self.dry_run:
             luksformat_proc.communicate(password.encode())
 
-
         luksopen_proc = cmd.execute(cryptsetup_open_command, 7, self.dry_run, False)
         if not self.dry_run:
             luksopen_proc.communicate(password.encode())
 
-        self.is_encrypted    = True
         self.real_path       = self.partition_path
         self.partition_path  = f"/dev/mapper/{mapper_name}"
         self.encrypt_uuid    = self.__get_blkid("UUID")
@@ -125,8 +132,8 @@ class RaidArray(Formattable):
     def __init__(self, devices   : list,
                        array_name: str,
                        level     : int=0,
-                       options: str="",
-                       dry_run: bool=False):
+                       options   : str="",
+                       dry_run   : bool=False):
 
         mdadm_command = f"mdadm --create --metadata=1.2 "
 
