@@ -1,30 +1,31 @@
-# import logging
 import os
 import sys
+import pickle
 
 from getpass import getpass
 from yaml    import safe_load
 
 sys.path.append(f"{os.getcwd()}/scripts")
 
-from scripts.pacstrap import pacstrap
-from scripts.drive_utils import Drive, RaidArray
+from scripts.pacstrap      import pacstrap
+from scripts.drive_utils   import Drive, RaidArray
 from scripts.merge_default import Defaults, fill_defaults
-from scripts.chroot import Chroot
+from scripts.chroot        import Chroot
 
-import scripts.command_utils as command
+import scripts.command_utils as cmd
 import scripts.output_utils  as output
 
+#------------------------------------------------------------------------------
 
 NEWROOT_MOUNTPOINT = "mnt"
 DRY_RUN            = True
 
-program_output = []
-
+#------------------------------------------------------------------------------
 
 with open("config.yaml", "r") as config_file:
     config_options = fill_defaults(safe_load(config_file), Defaults.PARENT)
 
+#------------------------------------------------------------------------------
 
 PARTITION_DISKS       = True
 ENCRYPT_PARTITIONS    = True
@@ -44,6 +45,7 @@ CONFIGURE_EARLY_CRYPT = False
 CONFIGURE_RAID        = False
 CONFIGURE_INITRAMFS   = False
 
+#------------------------------------------------------------------------------
 
 def sort_by_mountpoint(partition):
     """
@@ -63,6 +65,7 @@ def sort_by_mountpoint(partition):
     else:
         return len(partition[1].mountpoint.split("/"))
 
+#------------------------------------------------------------------------------
 
 def get_password(message: str, repeat_message: str):
     passwords_match = False
@@ -75,12 +78,15 @@ def get_password(message: str, repeat_message: str):
 
     return password
 
+#------------------------------------------------------------------------------
 
 def main():
     # Make sure that the mountpoint directory exists and create it if is doesn't
     if not os.path.exists(NEWROOT_MOUNTPOINT):
         os.mkdir(NEWROOT_MOUNTPOINT)
     
+    #--------------------------------------------------------------------------
+
     if PARTITION_DISKS:
         output.info(": Partitioning drives")
 
@@ -111,43 +117,54 @@ def main():
 
                 devices[uid] = drives[drive][uid]
 
+    #--------------------------------------------------------------------------
+
     if SETUP_RAID_ARRAYS:
         output.info(": Creating RAID arrays")
 
-        raid_devices = {}
+        raid_devices = []
 
         for uid in config_options["raid"]:
             raid_config = config_options["raid"][uid]
-            raid_devices = []
+            raid_array_devices = []
 
             for raid_device_uid in raid_config["devices"]:
-                raid_devices.append(devices[raid_device_uid])
+                raid_array_devices.append(devices[raid_device_uid])
             
-            devices[uid] = RaidArray(devices=raid_devices,
+            devices[uid] = RaidArray(devices=raid_array_devices,
                                      array_name=raid_config["array-name"],
                                      level=raid_config["level"],
                                      dry_run=DRY_RUN)
 
-            raid_devices[uid] = devices[uid]
+            raid_devices.append(devices[uid])
+
+    #--------------------------------------------------------------------------
 
     if ENCRYPT_PARTITIONS:
         output.info(": Encrypting partitions")
 
-        late_crypt_devices = {}
+        late_crypt_devices = []
         early_crypt_device = None
 
         for uid in config_options["crypt"]:
-            crypt_config = config_options["crypt"][uid]
+            crypt_config = fill_defaults(config_options["crypt"][uid], Defaults.CRYPT)
 
             password = get_password(f"Set encryption password for {devices[uid].partition_label}",
                                     f"Repeat password for {devices[uid].partition_label}")
 
-            devices[uid].encrypt_partition(password, crypt_config["crypt-label"])
+            devices[uid].encrypt_partition(password, crypt_config["crypt-label"], crypt_config["generate-keyfile"])
 
             if "load-early" in crypt_config and crypt_config["load-early"]:
-                early_crypt_device = devices[uid]
+                if early_crypt_device:
+                    output.warn(f"Cannot set '{devices[uid].partition_label}' to load early.")
+                    output.warn(f"'{early_crypt_device.partition_label}' is already set to load early.")
+                    exit(1)
+                else:
+                    early_crypt_device = devices[uid]
             else:
-                late_crypt_devices[uid] = devices[uid]
+                late_crypt_devices.append(devices[uid])
+
+    #--------------------------------------------------------------------------
 
     if FORMAT_PARTITIONS:
         output.info(": Creating filesystems")
@@ -162,48 +179,64 @@ def main():
 
         sorted_devices = dict(sorted(devices.items(), key=sort_by_mountpoint))
 
+    #--------------------------------------------------------------------------
+
     if MOUNT_FILESYSTEMS:
         output.info(": Mounting filesystems")
 
         for uid in sorted_devices:
             devices[uid].mount_filesystem(f"/mnt{devices[uid].mountpoint}")
 
+    #--------------------------------------------------------------------------
+
     if PACSTRAP:
         output.info(": Running pacstrap")
 
         pacstrap(dry_run=DRY_RUN)
 
+    #--------------------------------------------------------------------------
+
     if CHROOT:
-        command.execute("./mnt/etc/reset.sh")
+        # Reset the temporary test chroot environment
+        # Only contains a few files for the chroot class to modify
+        cmd.execute("./mnt/etc/reset.sh")
+
         with Chroot(target_mountpoint=NEWROOT_MOUNTPOINT, dry_run=DRY_RUN) as chroot_env:
+
             if CONFIGURE_CLOCK:
                 output.info(": Configuring clock")
 
-                clock_config = fill_defaults(config_options["clock"],
-                                             Defaults.CLOCK)
+                clock_config = fill_defaults(config_options["clock"], Defaults.CLOCK)
 
                 chroot_env.configure_clock(clock_config["timezone"],
                                            clock_config["hardware-utc"],
                                            clock_config["enable-ntp"])
 
+            #------------------------------------------------------------------
+
             if CONFIGURE_LOCALES:
                 output.info(": Configuring locales")
 
-                locale_config = fill_defaults(config_options["locales"],
-                                              Defaults.LOCALES)
+                locale_config = fill_defaults(config_options["locales"], Defaults.LOCALES)
 
                 chroot_env.configure_locales(locale_config["locale-gen"],
                                              locale_config["locale-conf"])
+
+            #------------------------------------------------------------------
 
             if CONFIGURE_HOSTS:
                 output.info(": Configuring hosts")
 
                 chroot_env.configure_hosts()
+
+            #------------------------------------------------------------------
             
             if CONFIGURE_HOSTNAME:
                 output.info(": Setting hostname")
 
                 chroot_env.set_hostname(config_options["hostname"])
+
+            #------------------------------------------------------------------
 
             if CONFIGURE_USERS:
                 output.info(": Configuring users")
@@ -219,12 +252,20 @@ def main():
 
                 chroot_env.configure_users(root_password, config_options["users"])
 
+            #------------------------------------------------------------------
+
             if CONFIGURE_CRYPT:
-                if CONFIGURE_EARLY_CRYPT:
-                    chroot_env.configure_early_crypt(devices["swap"])
+                if CONFIGURE_EARLY_CRYPT and early_crypt_device:
+                    chroot_env.configure_early_crypt(early_crypt_device)
             
             if CONFIGURE_RAID:
                 chroot_env.configure_raid(devices["root"])
+
+    devices_pickle = pickle.dumps(devices)
+    
+    unloaded_devices = pickle.loads(devices_pickle)
+    for device in unloaded_devices:
+        print(unloaded_devices[device].__dict__)
         
     
 if __name__ == "__main__":
