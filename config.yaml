@@ -57,7 +57,7 @@ raid:
 crypt:
   swap:
     crypt-label: "CRYPTSWAP"
-    early: true
+    load-early: true
   home:
     crypt-label: "CRYPTHOME"
     generate-keyfile: true
