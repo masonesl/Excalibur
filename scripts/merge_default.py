@@ -27,6 +27,11 @@ class Defaults(Enum):
         "partition-label" : None
     }
 
+    CRYPT = {
+        "load-early" : False,
+        "generate-keyfile" : False
+    }
+
     FILESYSTEM = {
         "filesystem": None,
         "label": None,
