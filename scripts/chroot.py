@@ -1,6 +1,8 @@
 import command_utils as cmd
 import output_utils  as output
 
+from drive_utils import Formattable
+
 #------------------------------------------------------------------------------
 
 class Chroot:
@@ -54,9 +56,12 @@ class Chroot:
         """Add a hook to /etc/mkinitcpio.conf
 
         Args:
-            preceding_hook (str): The hook directly before the hook you want to add
-            hook (str): The hook you want to add
+            preceding_hook (str): The hook directly before the hook to be added
+            hook (str): The actual hook to be added
         """
+
+        # This needs some work
+
         with open(f"{self.target}/etc/mkinitcpio.conf", "r") as initrd_conf_file:
             initrd_conf_data = initrd_conf_file.read()
 
@@ -64,6 +69,8 @@ class Chroot:
             initrd_conf_file.write(initrd_conf_data.replace(
                 preceding_hook, f"{preceding_hook} {hook}"
             ))
+
+    #--------------------------------------------------------------------------
 
     def configure_clock(self, timezone: str="",
                               hardware_utc: bool=True,
@@ -82,6 +89,8 @@ class Chroot:
         # Enable systemd-timesyncd if desired
         if enable_ntp:
             self.__wrap_chroot("systemctl enable systemd-timesyncd")
+
+    #--------------------------------------------------------------------------
 
     def configure_locales(self, locale_gen: list=["en_US.UTF-8 UTF-8"],
                                 locale_conf: str="en_US.UTF-8"):
@@ -103,15 +112,21 @@ class Chroot:
         with open(f"{self.target}/etc/locale.conf", "w") as locale_conf_file:
             locale_conf_file.write(f"LANG={locale_conf}")
 
+    #--------------------------------------------------------------------------
+
     def configure_hosts(self):
         # Add localhost entries in /etc/hosts for both IPv4 and IPv6
         with open(f"{self.target}/etc/hosts", "a") as hosts_file:
             hosts_file.write("127.0.0.1\tlocalhost\n")
             hosts_file.write("::1\t\t\tlocalhost\n")
 
+    #--------------------------------------------------------------------------
+
     def set_hostname(self, hostname: str="myhostname"):
         with open(f"{self.target}/etc/hostname", "w") as hostname_file:
             hostname_file.write(hostname)
+
+    #--------------------------------------------------------------------------
 
     def configure_users(self, root_password: str="",
                               users: dict={}):
@@ -158,24 +173,44 @@ class Chroot:
                 passwd_proc.communicate(
                     f"{users[user]['password']}\n{users[user]['password']}".encode())
 
-    def configure_early_crypt(self, encrypted_block):
-        crypt_uuid  = encrypted_block.uuid
-        crypt_label = encrypted_block.encrypt_label
+    #--------------------------------------------------------------------------
 
+    def configure_early_crypt(self, encrypted_block: Formattable):
         self.__add_hook("block", "encrypt")
 
-        self.kernel_parameters += f"cryptdevice=UUID={crypt_uuid}:{crypt_label}"
+        self.kernel_parameters += f"cryptdevice=UUID={encrypted_block.uuid}:{encrypted_block.encrypt_label}"
+
+    #--------------------------------------------------------------------------
+
+    def configure_late_crypt(self, encrypted_block: Formattable):
+        crypttab_line = f"{encrypted_block.encrypt_label}\tUUID={encrypted_block.uuid}"
+
+        if encrypted_block.uses_keyfile:
+            cmd.execute(f"cp /tmp/{encrypted_block.encrypt_label}.key {self.target}/etc/cryptsetup-keys.d/")
+            crypttab_line += f"\t/etc/cryptsetup-keys.d/{encrypted_block.encrypt_label}.key"
+
+        with open(f"{self.target}/etc/crypttab", "a") as crypttab_file:
+            crypttab_file.write(crypttab_line)
+
+    #--------------------------------------------------------------------------
 
     def configure_raid(self, raid_array):
+
+        # Scan for the current RAID arrays and their configurations and add them to the mdadm.conf file
         raid_conf = cmd.execute("mdadm --detail --scan", 6, self.dry_run)
         if not self.dry_run:
             with open(f"{self.target}/etc/mdadm.conf", "a") as mdadm_conf_file:
                 mdadm_conf_file.write(raid_conf[0].decode())
 
+        # The mdadm.conf file will be used in the initramfs, so the mdadm_udev hook must be added
         self.__add_hook("block", "mdadm_udev")
+
+    #--------------------------------------------------------------------------
 
     def generate_initramfs(self):
         self.__wrap_chroot("mkinitcpio -P")
+
+    #--------------------------------------------------------------------------
 
     def exit(self):
         # Unmount all API filesystems from new root
@@ -184,6 +219,8 @@ class Chroot:
         cmd.execute(f"umount -R {self.target}/dev/", dry_run=self.dry_run)
         cmd.execute(f"umount -R {self.target}/run/", dry_run=self.dry_run)
         cmd.execute(f"umount -R {self.target}/sys/firmware/efi/efivars", dry_run=self.dry_run)
+
+    #--------------------------------------------------------------------------
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.exit()
