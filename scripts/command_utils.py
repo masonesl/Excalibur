@@ -1,5 +1,6 @@
 from subprocess import Popen, PIPE
 from shlex      import split as shsplit
+from time       import sleep
 
 import output_utils as output
 
@@ -11,9 +12,10 @@ STD_CODES = {
 }
 
 
-def execute(command: str, pipe_mode: int=2, dry_run=False, wait_for_proc=True):
+def execute(command: str, pipe_mode: int=2, dry_run=False, wait_for_proc=True, print_errors=True):
     if dry_run:
-        output.info(f"- {command} -")
+        output.print_command(command)
+        sleep(.1)
         return
 
     std = {
@@ -31,15 +33,16 @@ def execute(command: str, pipe_mode: int=2, dry_run=False, wait_for_proc=True):
                                       stderr=std["stderr"],
                                       stdin =std["stdin"])
     
-    # If there are any errors, print them and exit with a non-zero return code
-    if std["stderr"] and process.poll() and (errors := process.stderr.readlines()):
-        for eline in errors:
-            output.error(f"{command} failed")
-            output.error(f":: {eline.decode()}", end="")
+    if not wait_for_proc:
+        return process
+    
+    proc_comm = process.communicate()
 
-    if wait_for_proc:
-        return process.communicate()
+    # If there are any errors, print them
+    if print_errors and std["stderr"] and process.poll() != 0:
+        output.error(f"Command '{command}' failed to execute")
+        print(proc_comm[1].decode())
 
-    return process
+    return proc_comm
 
 # EOF
