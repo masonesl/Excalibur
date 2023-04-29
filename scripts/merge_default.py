@@ -29,7 +29,7 @@ class Defaults(Enum):
 
     CRYPT = {
         "load-early" : False,
-        "generate-keyfile" : False
+        "generate-keyfile" : False,
     }
 
     FILESYSTEM = {
@@ -53,6 +53,7 @@ class Defaults(Enum):
 
     USER = {
         "shell" : "/bin/bash",
+        "home"  : "",
         "comment" : "",
         "groups" : []
     }
