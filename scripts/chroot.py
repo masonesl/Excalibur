@@ -25,9 +25,11 @@ class Chroot:
         # Copy DNS details to new root
         cmd.execute(f"cp /etc/resolv.conf {target_mountpoint}/etc/resolv.conf", dry_run=dry_run)
 
-        self.kernel_parameters = ""
         self.target  = target_mountpoint
         self.dry_run = dry_run
+
+        self.system_groups     = self.__get_groups()
+        self.kernel_parameters = ""
 
     #--------------------------------------------------------------------------
 
@@ -69,6 +71,14 @@ class Chroot:
             initrd_conf_file.write(initrd_conf_data.replace(
                 preceding_hook, f"{preceding_hook} {hook}"
             ))
+
+    def __get_groups(self):
+        groups = []
+        with open(f"{self.target}/etc/group", "r") as groups_file:
+            for groupline in groups_file.readlines():
+                groups.append(groupline.split(":")[0])
+
+        return groups
 
     #--------------------------------------------------------------------------
 
@@ -128,50 +138,51 @@ class Chroot:
 
     #--------------------------------------------------------------------------
 
-    def configure_users(self, root_password: str="",
-                              users: dict={}):
-        
+    def set_root_password(self, root_password: str):
         root_password_proc = self.__wrap_chroot("passwd", 7, wait_for_proc=False)
         if not self.dry_run:
             root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
 
-        # Build a list of groups that exist
-        system_groups = []
-        with open(f"{self.target}/etc/group", "r") as groups_file:
-            for groupline in groups_file.readlines():
-                system_groups.append(groupline.split(":")[0])
+    #--------------------------------------------------------------------------
 
-        for user in users:
-            self.__wrap_chroot(f"useradd {user}")
+    def configure_user(self, username: str,
+                             shell   : str,
+                             home    : str,
+                             comment : str,
+                             groups  : list,
+                             password: str):
+        
+        self.__wrap_chroot(f"useradd -m{f' -d {home}' if home else ''} {username}")
 
-            if shell := users[user]["shell"]:
-                # Check to see if the specified shell is installed
-                with open(f"{self.target}/etc/shells", "r") as shells_file:
-                    shell_installed = False
-                    for shell_line in shells_file.readlines()[3:]:
-                        if shell_line.strip() == shell:
-                            shell_installed = True
+        if shell:
+            # Try to install shell if it does not exist
+            with open(f"{self.target}/etc/shells", "r") as shells_file:
 
-                    if not shell_installed:
-                        self.__wrap_chroot(f"pacman --noconfirm -S {shell.split('/')[-1]}")
-                        
-                self.__wrap_chroot(f"usermod -s {shell} {user}")
+                shell_installed = False
+                for shell_line in shells_file.readlines()[3:]:
+                    if shell_line.strip() == shell:
+                        shell_installed = True
 
-            if comment := users[user]["comment"]:
-                self.__wrap_chroot(f"usermod -c {comment} {user}")
-            
-            if groups := users[user]["groups"]:
-                for group in groups:
-                    # Create group if it doesn't exist
-                    if group not in system_groups:
-                        self.__wrap_chroot(f"groupadd {group}")
+                if not shell_installed:
+                    self.__wrap_chroot(f"pacman --noconfirm -S {shell.split('/')[-1]}")
+                    
+            self.__wrap_chroot(f"usermod -s {shell} {username}")
 
-                    self.__wrap_chroot(f"usermod -a -G {group} {user}")
+        if comment:
+            self.__wrap_chroot(f"usermod -c {comment} {username}")
 
-            passwd_proc = self.__wrap_chroot(f"passwd {user}", 7, wait_for_proc=False)
-            if not self.dry_run:
-                passwd_proc.communicate(
-                    f"{users[user]['password']}\n{users[user]['password']}".encode())
+        if groups:
+            for group in groups:
+                # Create group if it does not exist
+                if group not in self.system_groups:
+                    self.__wrap_chroot(f"groupadd {group}")
+                    self.system_groups.append(group)
+                
+                self.__wrap_chroot(f"usermod -a -G {group}, {username}")
+
+        passwd_proc = self.__wrap_chroot(f"passwd {username}", 7, wait_for_proc=False)
+        if not self.dry_run:
+            passwd_proc.communicate(f"{password}\n{password}".encode())
 
     #--------------------------------------------------------------------------
 
