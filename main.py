@@ -1,6 +1,7 @@
 import os
 import sys
 import pickle
+import argparse
 
 from getpass import getpass
 from yaml    import safe_load
@@ -28,6 +29,19 @@ with open("config.yaml", "r") as config_file:
     config_options = fill_defaults(safe_load(config_file), Defaults.PARENT)
 
 #------------------------------------------------------------------------------
+# Parse arguments
+
+parser = argparse.ArgumentParser(
+    prog="excalibur",
+    description="Config file based Arch Linux installer"
+)
+
+subparsers = parser.add_subparsers(dest="subcommand")
+
+run_parser = subparsers.add_parser("run")
+
+args = parser.parse_args()
+#------------------------------------------------------------------------------
 
 PARTITION_DISKS       = True
 ENCRYPT_PARTITIONS    = True
@@ -37,16 +51,16 @@ MOUNT_FILESYSTEMS     = True
 PACSTRAP              = False
   
 CHROOT                = True
-CONFIGURE_CLOCK       = False
-CONFIGURE_LOCALES     = False
-CONFIGURE_HOSTS       = False
-CONFIGURE_HOSTNAME    = False
-CONFIGURE_USERS       = False
+CONFIGURE_CLOCK       = True
+CONFIGURE_LOCALES     = True
+CONFIGURE_HOSTS       = True
+CONFIGURE_HOSTNAME    = True
+CONFIGURE_USERS       = True
 CONFIGURE_CRYPT       = True
-CONFIGURE_EARLY_CRYPT = False
-CONFIGURE_LATE_CRYPT  = False
-CONFIGURE_RAID        = False
-CONFIGURE_INITRAMFS   = False
+CONFIGURE_EARLY_CRYPT = True
+CONFIGURE_LATE_CRYPT  = True
+CONFIGURE_RAID        = True
+CONFIGURE_INITRAMFS   = True
 
 #------------------------------------------------------------------------------
 # This function will be used as a key for sorting by mountpoint length to ensure
@@ -92,14 +106,60 @@ def main():
         os.mkdir(NEWROOT_MOUNTPOINT)
     
     #--------------------------------------------------------------------------
+    # Get all passwords at the beginning
+
+    # Set all passwords for encrypted devices that should be don't use keyfiles
+    if ENCRYPT_PARTITIONS:
+        for encrypted_device in config_options["crypt"]:
+            if DRY_RUN:
+                config_options["crypt"][encrypted_device]["password"] = "abc123"
+
+            else:
+                config_options["crypt"][encrypted_device]["password"] = get_password(
+                    f"Set encrypt password for {encrypted_device}",
+                    f"Repeat password for {encrypted_device}"
+                )
+
+    # Set all user passowrds including root
+    if CONFIGURE_USERS:
+        if DRY_RUN:
+            root_password = "abc123"
+        else:
+            root_password = get_password("Set password for root", "Repeat password for root")
+
+        for user in config_options["users"]:
+            if DRY_RUN:
+                config_options["users"][user]["password"] = "abc123"
+            else:
+                config_options["users"][user]["password"] = get_password(
+                    f"Set password for {user}",
+                    f"Repeat password for {user}"
+                )
+
+    #--------------------------------------------------------------------------
 
     if PARTITION_DISKS:
-        output.info(": Partitioning drives")
+        drives_config = config_options["drives"]
+
+        output.warn("The following partitions will be created")
+        output.warn("Make sure this is what you want as these devices will likely be wiped")
+        for drive in drives_config:
+            output.warn(f"\t- {drive}")
+            for partition in drives_config[drive]["partitions"]:
+                output.warn(f"\t\t- {partition}")
+
+        print()
+        if (i := output.get_input("Are you sure you would like to continue? (N/y)").lower()) == "n" or i == "":
+            exit(1)
+
+        output.status("Partitioning drives...")
 
         drives = {}
         devices = {}
 
         for drive in config_options["drives"]:
+            output.substatus(f"Partitioning drive '{drive}'...")
+
             drive_config = fill_defaults(config_options["drives"][drive],
                                          Defaults.DRIVE)
 
@@ -110,6 +170,8 @@ def main():
                                   gpt=gpt)
 
             for uid in drive_config["partitions"]:
+                output.substatus(f"Creating partition '{uid}'...", 2)
+
                 partition_config = fill_defaults(drive_config["partitions"][uid],
                                                  Defaults.PARTITION)
 
@@ -122,19 +184,24 @@ def main():
                                             dry_run=DRY_RUN)
 
                 devices[uid] = drives[drive][uid]
+            
+            output.success(f"'{drive}' has been successfully partitioned!", 1)
 
     #--------------------------------------------------------------------------
 
     if SETUP_RAID_ARRAYS:
-        output.info(": Creating RAID arrays")
+        output.status("Creating RAID arrays...")
 
         raid_devices = []
 
         for uid in config_options["raid"]:
+            output.substatus(f"Creating array '{uid}'...")
+
             raid_config = config_options["raid"][uid]
             raid_array_devices = []
 
             for raid_device_uid in raid_config["devices"]:
+                output.substatus(f"Adding device '{raid_device_uid}' to array '{uid}'", 2)
                 raid_array_devices.append(devices[raid_device_uid])
             
             devices[uid] = RaidArray(devices=raid_array_devices,
@@ -144,21 +211,24 @@ def main():
 
             raid_devices.append(devices[uid])
 
+            output.success(f"RAID array '{uid}' has been successfully created!", 1)
+
     #--------------------------------------------------------------------------
 
     if ENCRYPT_PARTITIONS:
-        output.info(": Encrypting partitions")
+        output.status("Encrypting devices...")
 
         late_crypt_devices = []
         early_crypt_device = None
 
         for uid in config_options["crypt"]:
+            output.substatus(f"Encrypting device '{uid}'...")
+
             crypt_config = fill_defaults(config_options["crypt"][uid], Defaults.CRYPT)
 
-            password = get_password(f"Set encryption password for {devices[uid].partition_label}",
-                                    f"Repeat password for {devices[uid].partition_label}")
-
-            devices[uid].encrypt_partition(password, crypt_config["crypt-label"], crypt_config["generate-keyfile"])
+            devices[uid].encrypt_partition(crypt_config["password"],
+                                           crypt_config["crypt-label"],
+                                           crypt_config["generate-keyfile"])
 
             if "load-early" in crypt_config and crypt_config["load-early"]:
                 if early_crypt_device:
@@ -167,50 +237,63 @@ def main():
                     exit(1)
                 else:
                     early_crypt_device = devices[uid]
+                    output.info(f"Device '{uid}' set to decrypt in early userspace", 1)
             else:
                 late_crypt_devices.append(devices[uid])
+
+            output.success(f"Device '{uid}' has been successfully encrypted!", 1)
 
     #--------------------------------------------------------------------------
 
     if FORMAT_PARTITIONS:
-        output.info(": Creating filesystems")
+        output.status("Creating filesystems...")
 
         for uid in config_options["filesystems"]:
             filesystem_config = fill_defaults(config_options["filesystems"][uid],
                                               Defaults.FILESYSTEM)
 
+            output.substatus(f"Creating filesystem on '{uid}'...")
+
             devices[uid].new_filesystem(filesystem_config["filesystem"],
                                         filesystem_config["label"],
                                         filesystem_config["mountpoint"])
+
+            output.success(f"Device '{uid}' has been successfully formatted!", 1)
 
         sorted_devices = dict(sorted(devices.items(), key=sort_by_mountpoint))
 
     #--------------------------------------------------------------------------
 
     if MOUNT_FILESYSTEMS:
-        output.info(": Mounting filesystems")
+        output.status("Mounting filesystems...")
 
         for uid in sorted_devices:
             devices[uid].mount_filesystem(f"/mnt{devices[uid].mountpoint}")
 
+        output.status("Filesystems successfully mounted!")
+
     #--------------------------------------------------------------------------
 
     if PACSTRAP:
-        output.info(": Running pacstrap")
+        output.status("Running pacstrap...")
 
         pacstrap(dry_run=DRY_RUN)
+
+        output.status("Pacstrap completed successfully!")
 
     #--------------------------------------------------------------------------
 
     if CHROOT:
         # Reset the temporary test chroot environment
         # Only contains a few files for the chroot class to modify
-        cmd.execute("./mnt/etc/reset.sh")
+        if DRY_RUN:
+            cmd.execute("./mnt/etc/reset.sh")
 
         with Chroot(target_mountpoint=NEWROOT_MOUNTPOINT, dry_run=DRY_RUN) as chroot_env:
+            output.status("Chroot envrionment created")
 
             if CONFIGURE_CLOCK:
-                output.info(": Configuring clock")
+                output.substatus("Configuring clock...")
 
                 clock_config = fill_defaults(config_options["clock"], Defaults.CLOCK)
 
@@ -221,7 +304,7 @@ def main():
             #------------------------------------------------------------------
 
             if CONFIGURE_LOCALES:
-                output.info(": Configuring locales")
+                output.substatus("Configuring Locales...")
 
                 locale_config = fill_defaults(config_options["locales"], Defaults.LOCALES)
 
@@ -245,24 +328,27 @@ def main():
             #------------------------------------------------------------------
 
             if CONFIGURE_USERS:
-                output.info(": Configuring users")
+                output.substatus("Configuring users...")
 
-                root_password = get_password("Set password for root",
-                                             "Repeat password for root")
+                chroot_env.set_root_password(root_password)
 
                 for user in config_options["users"]:
-                    config_options["users"][user]["password"] = get_password(
-                        f"Set password for {user}",
-                        f"Repeat password for {user}"
-                    )
-
-                chroot_env.configure_users(root_password, config_options["users"])
+                    user_config = config_options["users"][user]
+                    chroot_env.configure_user(user,
+                                              user_config["shell"],
+                                              user_config["home"],
+                                              user_config["comment"],
+                                              user_config["groups"],
+                                              user_config["password"])
 
             #------------------------------------------------------------------
 
             if CONFIGURE_CRYPT:
                 if CONFIGURE_EARLY_CRYPT and early_crypt_device:
                     chroot_env.configure_early_crypt(early_crypt_device)
+                if CONFIGURE_LATE_CRYPT:
+                    for crypt_device in late_crypt_devices:
+                        chroot_env.configure_late_crypt(crypt_device)
             
             if CONFIGURE_RAID:
                 chroot_env.configure_raid(devices["root"])
