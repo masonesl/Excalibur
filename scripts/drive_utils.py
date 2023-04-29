@@ -35,7 +35,7 @@ class Formattable:
 
     def __get_blkid(self, element: str):
         return cmd.execute(
-            f"blkid -s {element} -o value {self.partition_path}", 6)[0].decode().strip()
+            f"blkid -s {element} -o value {self.partition_path}", 4)[0].decode().strip()
 
     #--------------------------------------------------------------------------
 
