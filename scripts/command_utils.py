@@ -1,6 +1,5 @@
 from subprocess import Popen, PIPE
 from shlex      import split as shsplit
-from time       import sleep
 
 import output_utils as output
 
@@ -15,7 +14,6 @@ STD_CODES = {
 def execute(command: str, pipe_mode: int=2, dry_run=False, wait_for_proc=True, print_errors=True):
     if dry_run:
         output.print_command(command)
-        sleep(.1)
         return
 
     std = {
