@@ -34,7 +34,7 @@ def error(message):
     print(Output.format_output(message, Output.BOLD))
 
 def success(message, nest_val: int=0):
-    print_symbol(f"{''.join(['   ' for i in range(nest_val)])}<:>", Output.GREEN)
+    print_symbol(f"{''.join([' + ' for i in range(nest_val)])}<:>", Output.GREEN)
     print(Output.format_output(message, Output.BOLD))
 
 def status(message, end="\n"):
