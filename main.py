@@ -10,7 +10,7 @@ sys.path.append(f"{os.getcwd()}/scripts")
 
 from scripts.pacstrap      import pacstrap
 from scripts.drive_utils   import Drive, RaidArray
-from scripts.merge_default import Defaults, fill_defaults
+from scripts.config_utils import Defaults, fill_defaults
 from scripts.chroot        import Chroot
 
 import scripts.command_utils as cmd
@@ -36,11 +36,18 @@ parser = argparse.ArgumentParser(
     description="Config file based Arch Linux installer"
 )
 
+parser.add_argument("--zap-all", "-Z",
+                    help="Completely wipe all drives specified in config",
+                    dest="ZAP",
+                    action="store_true")
+
 subparsers = parser.add_subparsers(dest="subcommand")
 
 run_parser = subparsers.add_parser("run")
 
 args = parser.parse_args()
+print(args)
+
 #------------------------------------------------------------------------------
 
 PARTITION_DISKS       = True
@@ -100,7 +107,123 @@ def get_password(message: str, repeat_message: str):
 
 #------------------------------------------------------------------------------
 
+def zap_drives():
+    output.status("Preparing drives to be wiped...")
+
+    output.substatus("Stopping RAID arrays...")
+    cmd.execute("mdadm --stop --scan", dry_run=DRY_RUN)
+
+    output.substatus("Zeroing RAID superblocks...")
+    for device in os.listdir("/dev/"):
+        for drive in config_options["drives"].values():
+            if device.startswith(drive["device-path"]):
+                if dev_type := (cmd.execute(f"blkid -s TYPE -o value /dev/{device}", 4)[0].decode().strip() == "linux_raid_member"):
+                    cmd.execute(f"mdadm --zero-superblock /dev/{device}", dry_run=DRY_RUN)
+    
+    output.status("Wiping drives...")
+    for drive in config_options["drives"].values():
+        output.substatus(f"Wiping device {drive['device-path']}...")
+        cmd.execute(f"sgdisk -Z {drive['device-path']}", dry_run=DRY_RUN)
+
+#------------------------------------------------------------------------------
+# Password collection functions -----------------------------------------------
+#------------------------------------------------------------------------------
+
+def get_encrypt_passwords():
+    for encrypted_device in config_options["crypt"]:
+        if DRY_RUN:
+            config_options["crypt"][encrypted_device]["password"] = "abc123"
+
+        else:
+            config_options["crypt"][encrypted_device]["password"] = get_password(
+                f"Set encrypt password for {encrypted_device}",
+                f"Repeat password for {encrypted_device}"
+            )
+
+#------------------------------------------------------------------------------
+
+def get_user_passwords():
+    global root_password
+
+    if DRY_RUN:
+        root_password = "abc123"
+    else:
+        root_password = get_password("Set password for root", "Repeat password for root")
+
+    for user in config_options["users"]:
+        if DRY_RUN:
+            config_options["users"][user]["password"] = "abc123"
+        else:
+            config_options["users"][user]["password"] = get_password(
+                f"Set password for {user}",
+                f"Repeat password for {user}"
+            )
+
+#------------------------------------------------------------------------------
+
+def partition_drives():
+    # Dictionary for physical devices
+    global drives
+    # Dictionary for formattable devices (ie. partitions, RAID arrays)
+    global devices
+
+    drives_config = config_options["drives"]
+
+    output.warn("The following partitions will be created")
+    output.warn("Make sure this is what you want as these devices will likely be wiped")
+    for drive in drives_config:
+        output.warn(f"\t- {drive}")
+        for partition in drives_config[drive]["partitions"]:
+            output.warn(f"\t\t- {partition}")
+
+    print()
+    if (i := output.get_input("Are you sure you would like to continue? (N/y)").lower()) == "n" or i == "":
+        exit(1)
+
+    output.info("Continuing...")
+
+    output.status("Partitioning drives...")
+
+    drives = {}
+    devices = {}
+
+    for drive in config_options["drives"]:
+        output.substatus(f"Partitioning drive '{drive}'...")
+
+        drive_config = fill_defaults(config_options["drives"][drive],
+                                        Defaults.DRIVE)
+
+        device_path = drive_config["device-path"]
+        gpt         = drive_config["gpt"]
+
+        drives[drive] = Drive(device_path=device_path,
+                                gpt=gpt)
+
+        for uid in drive_config["partitions"]:
+            output.substatus(f"Creating partition '{uid}'...", 2)
+
+            partition_config = fill_defaults(drive_config["partitions"][uid],
+                                                Defaults.PARTITION)
+
+            drives[drive].new_partition(partition_size=partition_config["size"],
+                                        start_sector=partition_config["start-sector"],
+                                        end_sector=partition_config["end-sector"],
+                                        type_code=partition_config["type-code"],
+                                        partition_label=partition_config["partition-label"],
+                                        uid=uid,
+                                        dry_run=DRY_RUN)
+
+            devices[uid] = drives[drive][uid]
+        
+        output.success(f"'{drive}' has been successfully partitioned!", 1)
+
+#------------------------------------------------------------------------------
+
 def main():
+    if args.ZAP:
+        zap_drives()
+        exit()
+
     # Make sure that the mountpoint directory exists and create it if is doesn't
     if not os.path.exists(NEWROOT_MOUNTPOINT):
         os.mkdir(NEWROOT_MOUNTPOINT)
@@ -110,82 +233,17 @@ def main():
 
     # Set all passwords for encrypted devices that should be don't use keyfiles
     if ENCRYPT_PARTITIONS:
-        for encrypted_device in config_options["crypt"]:
-            if DRY_RUN:
-                config_options["crypt"][encrypted_device]["password"] = "abc123"
-
-            else:
-                config_options["crypt"][encrypted_device]["password"] = get_password(
-                    f"Set encrypt password for {encrypted_device}",
-                    f"Repeat password for {encrypted_device}"
-                )
+        get_encrypt_passwords()
 
     # Set all user passowrds including root
     if CONFIGURE_USERS:
-        if DRY_RUN:
-            root_password = "abc123"
-        else:
-            root_password = get_password("Set password for root", "Repeat password for root")
-
-        for user in config_options["users"]:
-            if DRY_RUN:
-                config_options["users"][user]["password"] = "abc123"
-            else:
-                config_options["users"][user]["password"] = get_password(
-                    f"Set password for {user}",
-                    f"Repeat password for {user}"
-                )
+        get_user_passwords()
 
     #--------------------------------------------------------------------------
 
+    # Create all specified partitions on the physical drives
     if PARTITION_DISKS:
-        drives_config = config_options["drives"]
-
-        output.warn("The following partitions will be created")
-        output.warn("Make sure this is what you want as these devices will likely be wiped")
-        for drive in drives_config:
-            output.warn(f"\t- {drive}")
-            for partition in drives_config[drive]["partitions"]:
-                output.warn(f"\t\t- {partition}")
-
-        print()
-        if (i := output.get_input("Are you sure you would like to continue? (N/y)").lower()) == "n" or i == "":
-            exit(1)
-
-        output.status("Partitioning drives...")
-
-        drives = {}
-        devices = {}
-
-        for drive in config_options["drives"]:
-            output.substatus(f"Partitioning drive '{drive}'...")
-
-            drive_config = fill_defaults(config_options["drives"][drive],
-                                         Defaults.DRIVE)
-
-            device_path = drive_config["device-path"]
-            gpt         = drive_config["gpt"]
-
-            drives[drive] = Drive(device_path=device_path,
-                                  gpt=gpt)
-
-            for uid in drive_config["partitions"]:
-                output.substatus(f"Creating partition '{uid}'...", 2)
-
-                partition_config = fill_defaults(drive_config["partitions"][uid],
-                                                 Defaults.PARTITION)
-
-                drives[drive].new_partition(partition_size=partition_config["size"],
-                                            start_sector=partition_config["start-sector"],
-                                            end_sector=partition_config["end-sector"],
-                                            type_code=partition_config["type-code"],
-                                            partition_label=partition_config["partition-label"],
-                                            uid=uid,
-                                            dry_run=DRY_RUN)
-
-                devices[uid] = drives[drive][uid]
-            
-            output.success(f"'{drive}' has been successfully partitioned!", 1)
+        partition_drives()
 
     #--------------------------------------------------------------------------
 

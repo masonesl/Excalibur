@@ -9,7 +9,7 @@ sys.path.append(f"{os.getcwd()}/scripts")
 
 from scripts.pacstrap      import pacstrap
 from scripts.drive_utils   import Drive, RaidArray
-from scripts.merge_default import Defaults, Config
+from scripts.config_utils  import Defaults, Config
 from scripts.chroot        import Chroot
 
 import scripts.command_utils as cmd
@@ -30,6 +30,18 @@ class Excalibur:
                 output.error(" >> ".join(option))
             exit(1)
 
+        # Print warnings if passwords were found in the config file
+        if warnings := self.config.password_warnings["users"]:
+            output.warn(f"Do not store user passwords in {self.args.CONFIG_FILE_PATH}")
+            output.warn(
+                f"The following users' passwords will be overwritted: {', '.join(warnings)}"
+                )
+        if warnings := self.config.password_warnings["encryption"]:
+            output.warn(f"Do not store encryption passwords in {self.args.CONFIG_FILE_PATH}")
+            output.warn(
+                f"The following encrypted device passwords will be overwritted: {', '.join(warnings)}"
+                )
+
         self.dry_run = self.args.DRY_RUN
         self.target  = self.args.MOUNTPOINT
 
@@ -41,6 +53,9 @@ class Excalibur:
         self.drives = {}
         # Stores formattable devices like partitions and RAID arrays
         self.devices = {}
+
+        # List of RAID arrays
+        self.raid_arrays = []
 
         # List of devices to be unlocked in late userspace via /etc/crypttab
         self.late_crypt_devices = []
@@ -122,8 +137,8 @@ class Excalibur:
         self.root_password = self.get_password("Set password for root",
                                                "Repeat password for root")
 
-        for user in self.config["users"]:
-            self.config["users"][user]["password"] = self.get_password(
+        for user in self.config.users:
+            self.config.users[user]["password"] = self.get_password(
                 f"Set password for {user}",
                 f"Repeat password for {user}"
             )
@@ -131,8 +146,8 @@ class Excalibur:
     #--------------------------------------------------------------------------
 
     def collect_crypt_passwords(self):
-        for crypt_device in self.config["crypt"]:
-            self.config["crypt"][crypt_device]["password"] = self.get_password(
+        for crypt_device in self.config.crypt:
+            self.config.crypt[crypt_device]["password"] = self.get_password(
                 f"Set encrypt password for {crypt_device}",
                 f"Repeat password for {crypt_device}"
             )
@@ -145,9 +160,9 @@ class Excalibur:
         output.warn("The following partitions will be created!")
         output.warn("Make sure this is what you want as these devices will likely be wiped!")
 
-        for drive in self.config["drives"]:
+        for drive in self.config.drives:
             output.warn(f"\t- {drive}")
-            for partition in self.config["drives"][drive]["partitions"]:
+            for partition in self.config.drives[drive]["partitions"]:
                 output.warn(f"\t\t- {partition}")
             output.warn("")
 
@@ -160,11 +175,10 @@ class Excalibur:
     #--------------------------------------------------------------------------
 
     def partition_drives(self):
-        for drive in self.config["drives"]:
+        for drive in self.config.drives:
             output.substatus(f"Partitioning drive '{drive}'...")
 
-            drive_config = fill_defaults(self.config["drives"][drive],
-                                         Defaults.DRIVE)
+            drive_config = self.config.drives[drive]
 
             device_path = drive_config["device-path"]
             gpt         = drive_config["gpt"]
@@ -175,8 +189,7 @@ class Excalibur:
             for uid in drive_config["partitions"]:
                 output.substatus(f"Creating partition '{uid}'...", 2)
 
-                partition_config = fill_defaults(drive_config["partitions"][uid],
-                                                    Defaults.PARTITION)
+                partition_config = drive_config["partitions"][uid]
 
                 self.drives[drive].new_partition(partition_size=partition_config["size"],
                                                  start_sector=partition_config["start-sector"],
@@ -193,10 +206,10 @@ class Excalibur:
     #--------------------------------------------------------------------------
 
     def setup_raid_arrays(self):
-        for uid in self.config["raid"]:
+        for uid in self.config.raid:
             output.substatus(f"Creating array '{uid}'...")
 
-            raid_config = self.config["raid"][uid]
+            raid_config = self.config.raid[uid]
             raid_array_devices = []
 
             for raid_device_uid in raid_config["devices"]:
@@ -208,15 +221,17 @@ class Excalibur:
                                           level=raid_config["level"],
                                           dry_run=self.dry_run)
 
+            self.raid_arrays.append(self.devices[uid])
+
             output.success(f"RAID array '{uid}' has been successfully created!", 1)
 
     #--------------------------------------------------------------------------
 
     def encrypt_partitions(self):
-        for uid in self.config["crypt"]:
+        for uid in self.config.crypt:
             output.substatus(f"Encrypting device '{uid}'...")
 
-            crypt_config = fill_defaults(self.config["crypt"][uid], Defaults.CRYPT)
+            crypt_config = self.config.crypt[uid]
 
             self.devices[uid].encrypt_partition(crypt_config["password"],
                                                 crypt_config["crypt-label"],
@@ -224,8 +239,8 @@ class Excalibur:
 
             if "load-early" in crypt_config and crypt_config["load-early"]:
                 if self.early_crypt_device:
-                    output.warn(f"Cannot set '{self.devices[uid].partition_label}' to load early.")
-                    output.warn(f"'{self.early_crypt_device.partition_label}' is already set to load early.")
+                    output.error(f"Cannot set '{self.devices[uid].partition_label}' to decrypt early.")
+                    output.error(f"'{self.early_crypt_device.partition_label}' is already set to decrypt early.")
                     exit(1)
                 else:
                     self.early_crypt_device = self.devices[uid]
@@ -235,10 +250,11 @@ class Excalibur:
 
             output.success(f"Device '{uid}' has been successfully encrypted!", 1)
 
+    #--------------------------------------------------------------------------
+
     def create_filesystems(self):
-        for uid in self.config["filesystems"]:
-            filesystem_config = fill_defaults(self.config["filesystems"][uid],
-                                              Defaults.FILESYSTEM)
+        for uid in self.config.filesystems:
+            filesystem_config = self.config.filesystems[uid]
 
             output.substatus(f"Creating filesystem on '{uid}'...")
 
@@ -248,8 +264,20 @@ class Excalibur:
 
             output.success(f"Device '{uid}' has been successfully formatted!", 1)
 
+        # Sort mountable devices by their mountpoints 
         self.devices = dict(sorted(self.devices.items(), key=self.sort_by_mountpoint))
-        print(self.devices)
+
+    #--------------------------------------------------------------------------
+
+    def mount_filesystems(self):
+        for uid in self.devices:
+            self.devices[uid].mount_filesystem(f"/mnt{self.devices[uid].mountpoint}")
+
+    #--------------------------------------------------------------------------
+
+    def bootstrap_newroot(self):
+        # @TODO set pacstrap options
+        pacstrap(dry_run=self.dry_run)
 
     #--------------------------------------------------------------------------
 
@@ -260,13 +288,87 @@ class Excalibur:
             output.info("Aborting...")
             exit(1)
 
-        self.collect_crypt_passwords()
-        self.collect_user_passwords()
+        if not self.dry_run:
+            self.collect_crypt_passwords()
+            self.collect_user_passwords()
 
+        output.status("Creating partitions...")
         self.partition_drives()
+        output.success("Partitions successfully created!")
+
+        output.status("Creating RAID arrays...")
         self.setup_raid_arrays()
+        output.success("RAID arrays successfully created!")
+
+        output.status("Encrypting block devices...")
         self.encrypt_partitions()
+        output.success("Block devices successfully encrypted!")
+
+        output.status("Creating filesystems...")
         self.create_filesystems()
+        output.success("Filesystems successfully created!")
+
+        output.status("Mounting filesystems...")
+        self.mount_filesystems()
+        output.success("Filesystems successfully mounted!")
+
+        output.status("Bootstrapping the new root...")
+        self.bootstrap_newroot()
+        output.success("New root sucessfully bootstrapped")
+
+
+        output.status("Creating chroot environment...")
+        with Chroot(self.target, self.dry_run) as chroot_env:
+
+            output.substatus("Configuring clock...")
+            chroot_env.configure_clock(
+                self.config.clock["timezone"],
+                self.config.clock["hardware-utc"],
+                self.config.clock["enable-ntp"]
+            )
+
+            output.substatus("Configuring locales...")
+            chroot_env.configure_locales(
+                self.config.locales["locale-gen"],
+                self.config.locales["locale-conf"]
+            )
+
+            output.info("Set default /etc/hosts", 1)
+            chroot_env.configure_hosts()
+
+            output.info(f"Set default hostname to {self.config.hostname}", 1)
+            chroot_env.set_hostname(self.config.hostname)
+
+            output.substatus("Configuring users...")
+            output.info("Set root password", 2)
+            chroot_env.set_root_password(self.root_password)
+
+            for user in self.config.users:
+                output.substatus(f"Configuring user {user}...", 2)
+                user_config = self.config.users[user]
+
+                chroot_env.configure_user(
+                    user,
+                    user_config["shell"],
+                    user_config["home"],
+                    user_config["comment"],
+                    user_config["groups"],
+                    user_config["password"]
+                )
+
+            output.substatus("Configuring encrypted devices...")
+            if self.early_crypt_device:
+                output.info(f"Configuring device {self.early_crypt_device} to decrypt in early userspace", 1)
+                chroot_env.configure_early_crypt(self.early_crypt_device)
+            for crypt_dev in self.late_crypt_devices:
+                chroot_env.configure_late_crypt(crypt_dev)
+
+            output.substatus("Configure RAID arrays...")
+            for array in self.raid_arrays:
+                chroot_env.configure_raid(array)
+
+
+
 
 #------------------------------------------------------------------------------
 
