@@ -1,3 +1,6 @@
 output.log
 scripts/__pycache__/*
 mnt/*
+pickle
+.vscode/launch.json
+config.yaml

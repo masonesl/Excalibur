@@ -1,6 +1,6 @@
 ---
 drives:
-  vda:
+  nvme0n1:
     device-path: "/dev/vda"
     partitions:
       efi:
@@ -18,7 +18,7 @@ drives:
       raidhome1:
         type-code: "fd00"
         partition-label: "Raid Home 1"
-  vdb:
+  nvme1n1:
     device-path: "/dev/vdb"
     partitions:
       raidswap2:
@@ -96,3 +96,10 @@ users:
     comment: "Mason"
     groups:
       - "wheel"
+
+aur-helper: "paru"
+
+packages:
+  - "opendoas"
+  - "neofetch"
+  - "btop"
