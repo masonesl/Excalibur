@@ -123,7 +123,8 @@ class Formattable:
             case _:
                 cmd.execute(
                     f"mount -m {self.partition_path} {override_mount if override_mount else self.mountpoint}",
-                    dry_run=self.dry_run)
+                    dry_run=self.dry_run
+                )
 
 #------------------------------------------------------------------------------    
 
@@ -212,7 +213,7 @@ class Partition(Formattable):
 
 #------------------------------------------------------------------------------
 
-class Drive:
+class Drive(Formattable):
 
     def __init__(self, device_path: str, gpt: bool=True):
         self.number_of_partitions = 0
