@@ -1,10 +1,46 @@
+from re import sub
+
 import command_utils as cmd
 
 
 KERNELS = ["zen", "hardened", "lts"]
 
+#------------------------------------------------------------------------------
 
-# @TODO Add some type of logging
+def tune_pacman(root: str="/", parallel_downloads: int=5):
+    """Modify pacman.conf to enable colored output and set parallel downloads
+
+    Args:
+        root (str, optional): The system root to use ({root}/etc/pacman.conf). Defaults to "/".
+        parallel_downloads (int, optional): How many parallel downloads to allow. Defaults to 5.
+    """
+    with open(f"{root}/etc/pacman.conf", "r") as pacman_conf_file:
+        pacman_conf = pacman_conf_file.read()
+
+    # Enable colored output
+    pacman_conf = sub(r"\n#(Color)", r"\n\g<1>", pacman_conf)
+
+    # Enable and set parallel downloads
+    pacman_conf = sub(
+        r"\n#?(ParallelDownloads = )\d+",
+        rf"\n\g<1>{parallel_downloads}",
+        pacman_conf
+    )
+    
+    with open(f"{root}/etc/pacman.conf", "w") as pacman_conf_file:
+        pacman_conf_file.write(pacman_conf)
+
+#------------------------------------------------------------------------------
+
+def update_pacman(dry_run: bool=False):
+    """Make sure that mirrors and keyring are up to date so prevent errors when installing
+
+    Args:
+        dry_run (bool, optional): Print, don't run commands. Defaults to False.
+    """
+    cmd.execute("pacman --noconfirm -Sy archlinux-keyring", dry_run=dry_run)
+
+#------------------------------------------------------------------------------
 
 def pacstrap(target_mountpoint: str="/mnt",
              linux_kernel: str="",
@@ -17,11 +53,7 @@ def pacstrap(target_mountpoint: str="/mnt",
              dry_run: bool=False
              ):
 
-    # Ensure mirrors and keys are up to date
-    cmd.execute("pacman --color always --noconfirm -Sy archlinux-keyring", dry_run=dry_run)
-
     # Start building pacstrap command with base and base-devel as baseline packages
-    pacstrap_command = ["pacstrap", target_mountpoint, "base", "base-devel"]
     pacstrap_command = f"pacstrap {target_mountpoint} base base-devel linux"
 
     # Append linux kernel and kernel header packages
@@ -59,6 +91,5 @@ def pacstrap(target_mountpoint: str="/mnt",
         pacstrap_command += " reflector"
 
     cmd.execute(pacstrap_command, dry_run=dry_run)
-
 
 # EOF
