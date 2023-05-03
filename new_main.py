@@ -367,6 +367,15 @@ class Excalibur:
             for array in self.raid_arrays:
                 chroot_env.configure_raid(array)
 
+            output.substatus("Configuring AUR...")
+            chroot_env.enable_aur(self.config.aur_helper)
+
+            output.substatus("Installing packages...")
+            chroot_env.install_packages(self.config.packages)
+
+            output.substatus("Enabling services...")
+            chroot_env.enable_services(self.config.services)
+
 
 
 
