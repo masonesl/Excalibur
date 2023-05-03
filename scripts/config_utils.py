@@ -19,7 +19,10 @@ class Defaults(Enum):
         "filesystems" : {},
         "clock" : {},
         "locales" : {},
-        "hostname" : "myhostname"
+        "hostname" : "myhostname",
+        "aur-helper" : None,
+        "packages" : [],
+        "services" : []
     }
 
     DRIVE = {
@@ -170,6 +173,10 @@ class Config:
                 Defaults.USER,
                 ["users", user]
             )
+
+        self.aur_helper = config["aur-helper"]
+        self.packages   = config["packages"]
+        self.services   = config["services"]
 
     def fill_defaults(self, config: dict,
                             default_config: Defaults,
