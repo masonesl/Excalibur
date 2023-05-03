@@ -25,8 +25,9 @@ class Chroot:
         # Copy DNS details to new root
         cmd.execute(f"cp /etc/resolv.conf {target_mountpoint}/etc/resolv.conf", dry_run=dry_run)
 
-        self.target  = target_mountpoint
-        self.dry_run = dry_run
+        self.target    = target_mountpoint
+        self.dry_run   = dry_run
+        self.installer = "pacman"
 
         self.system_groups     = self.__get_groups()
         self.kernel_parameters = ""
@@ -38,7 +39,7 @@ class Chroot:
 
     #--------------------------------------------------------------------------
 
-    def __wrap_chroot(self, command: str, pipe_mode: int=3, wait_for_proc=True):
+    def __wrap_chroot(self, command: str, pipe_mode: int=3, wait_for_proc=True, user: str=""):
         """Execute a command in the chroot environment
 
         Args:
@@ -50,7 +51,12 @@ class Chroot:
             tuple: If wait_for_proc is True
             subprocess.Popen: If wait_for_proc is False
         """
-        return cmd.execute(f"chroot {self.target} sh -c '{command}'", pipe_mode, self.dry_run, wait_for_proc)
+        return cmd.execute(
+            f"chroot {f'--userspec={user} ' if user else ''}{self.target} sh -c '{command}'",
+            pipe_mode,
+            self.dry_run,
+            wait_for_proc
+        )
 
     #--------------------------------------------------------------------------
 
@@ -223,7 +229,48 @@ class Chroot:
 
     #--------------------------------------------------------------------------
 
+    def enable_aur(self, helper: str):
+        helper_url = f"https://aur.archlinux.org/{helper}.git"
+        self.installer = helper
+
+        # Create a temporary user to run makepkg
+        self.__wrap_chroot("useradd -M -N aurtmp")
+
+        # Create a drop in sudo configuration file for the temporary user
+        with open(f"{self.target}/etc/sudoers.d/aurtmp", "w") as sudoers:
+            sudoers.write("aurtmp ALL=(ALL:ALL) NOPASSWD: ALL")
+        
+        # Clone the AUR helper repo
+        self.__wrap_chroot(f"git clone {helper_url} /tmp/{helper}", user="aurtmp")
+
+        # Build and install the helper
+        self.__wrap_chroot(f"cd /tmp/{helper} && makepkg -S -i", user="aurtmp")
+
+    #--------------------------------------------------------------------------
+
+    def install_packages(self, packages: list):
+        if self.installer == "pacman":
+            self.__wrap_chroot(f"pacman -Syu {' '.join(packages)}")
+        else:
+            self.__wrap_chroot(
+                f"{self.installer} -Syu {' '.join(packages)}",
+                user="aurtmp"
+            )
+
+    #--------------------------------------------------------------------------
+
+    def enable_services(self, services: list):
+        for service in services:
+            self.__wrap_chroot(f"systemctl enable {service}")
+
+    #--------------------------------------------------------------------------
+
     def exit(self):
+        # Clean up aur helper user if invoked
+        if self.installer != "pacman":
+            self.__wrap_chroot("userdel aurtmp")
+            self.__wrap_chroot("rm /etc/sudoers.d/aurtmp")
+
         # Unmount all API filesystems from new root
         cmd.execute(f"umount -R {self.target}/proc/", dry_run=self.dry_run)
         cmd.execute(f"umount -R {self.target}/sys/", dry_run=self.dry_run)
