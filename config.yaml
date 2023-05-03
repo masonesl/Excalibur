@@ -103,3 +103,8 @@ packages:
   - "opendoas"
   - "neofetch"
   - "btop"
+
+services:
+  - "sshd"
+  - "NetworkManager"
+  - "reflector.timer"
