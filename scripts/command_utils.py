@@ -41,6 +41,9 @@ def execute(command: str, pipe_mode: int=2, dry_run=False, wait_for_proc=True, p
         output.error(f"Command '{command}' failed to execute")
         print(proc_comm[1].decode())
 
+        if (i := output.get_input("Would you like to continue? (N/y)").lower()) == "n" or i == "":
+            raise Exception
+
     return proc_comm
 
 # EOF
