@@ -8,6 +8,17 @@ class Required:
     """
     pass
 
+
+class Choice:
+    def __init__(self, default, *choices):
+        self.default = default
+        self.choices = choices
+
+    def __iter__(self):
+        yield self.default
+        for val in self.choices:
+            yield val
+
 #------------------------------------------------------------------------------
 
 class Defaults(Enum):
@@ -20,9 +31,15 @@ class Defaults(Enum):
         "clock" : {},
         "locales" : {},
         "hostname" : "myhostname",
-        "aur-helper" : None,
+        "aur-helper" : Choice("", "paru", "paru-bin", "yay", "yay-bin"),
         "packages" : [],
-        "services" : []
+        "services" : [],
+        "kernel" : Choice("", "zen", "hardened", "lts"),
+        "firmware" : Choice(True, False),
+        "boot" : {},
+        "networkmanager" : Choice(True, False),
+        "ssh" : Choice(True, False),
+        "reflector" : Choice(True, False)
     }
 
     DRIVE = {
@@ -47,21 +64,21 @@ class Defaults(Enum):
 
     CRYPT = {
         "crypt-label" : Required(),
-        "load-early" : False,
-        "generate-keyfile" : False,
+        "load-early" : Choice(False, True),
+        "generate-keyfile" : Choice(False, True),
         "password" : "password"
     }
 
     FILESYSTEM = {
-        "filesystem": Required(),
+        "filesystem": Choice(Required(), "efi", "swap", "ext4", "xfs"),
         "label": None,
         "mountpoint": None
     }
 
     CLOCK = {
         "timezone": "UTC",
-        "hardware-utc": True,
-        "enable-ntp": True
+        "hardware-utc": Choice(True, False),
+        "enable-ntp": Choice(True, False)
     }
 
     LOCALES = {
@@ -79,6 +96,11 @@ class Defaults(Enum):
         "password" : "password"
     }
 
+    BOOT = {
+        "bootloader" : "grub",
+        "efi" : Choice(True, False)
+    }
+
 #------------------------------------------------------------------------------
 
 class Config:
@@ -87,9 +109,10 @@ class Config:
         with open(config_file_path, "r") as config_file:
             config = safe_load(config_file)
 
+        self.missing_required  = []
+
         config = self.fill_defaults(config, Defaults.PARENT)
 
-        self.missing_required  = []
         self.password_warnings = {
             "users"      : [],
             "encryption" : []
@@ -177,15 +200,37 @@ class Config:
         self.aur_helper = config["aur-helper"]
         self.packages   = config["packages"]
         self.services   = config["services"]
+        self.kernel     = config["kernel"]
+        self.firmware   = config["firmware"]
+
+        self.boot = self.fill_defaults(
+            config["boot"],
+            Defaults.BOOT,
+            ["boot"]
+        )
+
+        self.networkmanager = config["networkmanager"]
+        self.ssh            = config["ssh"]
+        self.reflector      = config["reflector"]
+
+        print(self.__dict__)
 
     def fill_defaults(self, config: dict,
                             default_config: Defaults,
-                            key_path: list=None) -> dict:
+                            key_path: list=[]) -> dict:
 
         default_options = default_config.value
 
         for option in default_options:
-            if option not in config:
+            if type(default_options[option]) == Choice:
+                if type(default_options[option].default) == Required and option not in config:
+                    self.missing_required.append(key_path+[option])
+                elif option in config and config[option] not in default_options[option]:
+                    self.missing_required.append(key_path+[option])
+                elif option not in config:
+                    config[option] = default_options[option].default
+                
+            elif option not in config:
                 if type(default_options[option]) == Required:
                     self.missing_required.append(key_path+[option])
                 else:
