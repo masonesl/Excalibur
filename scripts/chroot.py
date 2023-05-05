@@ -1,3 +1,5 @@
+from re import sub, findall
+
 import command_utils as cmd
 import output_utils  as output
 
@@ -134,7 +136,7 @@ class Chroot:
         # Add localhost entries in /etc/hosts for both IPv4 and IPv6
         with open(f"{self.target}/etc/hosts", "a") as hosts_file:
             hosts_file.write("127.0.0.1\tlocalhost\n")
-            hosts_file.write("::1\t\t\tlocalhost\n")
+            hosts_file.write("::1\t\tlocalhost\n")
 
     #--------------------------------------------------------------------------
 
@@ -211,7 +213,8 @@ class Chroot:
 
     #--------------------------------------------------------------------------
 
-    def configure_raid(self, raid_array):
+    def configure_raid(self):
+        self.__wrap_chroot("pacman --noconfirm -S mdadm")
 
         # Scan for the current RAID arrays and their configurations and add them to the mdadm.conf file
         raid_conf = cmd.execute("mdadm --detail --scan", 6, self.dry_run)
@@ -219,7 +222,7 @@ class Chroot:
             with open(f"{self.target}/etc/mdadm.conf", "a") as mdadm_conf_file:
                 mdadm_conf_file.write(raid_conf[0].decode())
 
-        # The mdadm.conf file will be used in the initramfs, so the mdadm_udev hook must be added
+        # Add the mdadm_udev hook to the initramfs to load RAID arrays on boot
         self.__add_hook("block", "mdadm_udev")
 
     #--------------------------------------------------------------------------
@@ -240,20 +243,22 @@ class Chroot:
         with open(f"{self.target}/etc/sudoers.d/aurtmp", "w") as sudoers:
             sudoers.write("aurtmp ALL=(ALL:ALL) NOPASSWD: ALL")
         
-        # Clone the AUR helper repo
+        # Download git and clone the AUR helper repo
+        self.__wrap_chroot("pacman --noconfirm -S git")
         self.__wrap_chroot(f"git clone {helper_url} /tmp/{helper}", user="aurtmp")
 
         # Build and install the helper
-        self.__wrap_chroot(f"cd /tmp/{helper} && makepkg -S -i", user="aurtmp")
+        self.__wrap_chroot(f"cd /tmp/{helper} && makepkg -S", user="aurtmp")
+        self.__wrap_chroot(f"cd /tmp/{helper} && makepkg --noconfirm -i", user="aurtmp")
 
     #--------------------------------------------------------------------------
 
     def install_packages(self, packages: list):
         if self.installer == "pacman":
-            self.__wrap_chroot(f"pacman -Syu {' '.join(packages)}")
+            self.__wrap_chroot(f"pacman --noconfirm -Syu {' '.join(packages)}")
         else:
             self.__wrap_chroot(
-                f"{self.installer} -Syu {' '.join(packages)}",
+                f"{self.installer.strip('-bin')} --noconfirm -Syu {' '.join(packages)}",
                 user="aurtmp"
             )
 
@@ -276,7 +281,6 @@ class Chroot:
         cmd.execute(f"umount -R {self.target}/sys/", dry_run=self.dry_run)
         cmd.execute(f"umount -R {self.target}/dev/", dry_run=self.dry_run)
         cmd.execute(f"umount -R {self.target}/run/", dry_run=self.dry_run)
-        cmd.execute(f"umount -R {self.target}/sys/firmware/efi/efivars", dry_run=self.dry_run)
 
     #--------------------------------------------------------------------------
 
