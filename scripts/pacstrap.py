@@ -46,7 +46,7 @@ def pacstrap(target_mountpoint: str="/mnt",
              linux_kernel: str="",
              linux_firmware: bool=True,
              bootloader: str="grub",
-             efibootmgr: bool=True,
+             efi: bool=True,
              network_manager: bool=True,
              enable_ssh: bool=True,
              reflector: bool=True,
@@ -75,7 +75,7 @@ def pacstrap(target_mountpoint: str="/mnt",
         pacstrap_command += f" {bootloader}"
 
     # Append efibootmgr by default to allow for booting with efi
-    if efibootmgr:
+    if efi:
         pacstrap_command += " efibootmgr"
 
     # Append networkmanager by default
