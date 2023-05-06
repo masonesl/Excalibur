@@ -190,6 +190,39 @@ class Excalibur:
                 print("Passwords do not match.")
 
         return password
+    
+    #--------------------------------------------------------------------------
+
+    @staticmethod
+    def notify_status(task_key: dict, status: dict) -> int:
+        line = lambda task, task_key : f"[{task}] {task_key[task]}"
+
+        default = None
+        for task in task_key:
+            # Indicate that the task has not been tried
+            if task not in status:
+                output.warn(line(task, task_key))
+
+            # Indicate that the task has successfully finished
+            elif status[task]["Status"] == 0:
+                output.success(line(task, task_key))
+
+            # Indicate that the task was started, but not finished
+            elif status[task]["Status"] == 1:
+                output.error(f"{line(task, task_key)} (Interrupted)")
+                default = task
+
+        valid_choice = False
+        while not valid_choice:
+            try:
+                choice = int(output.get_input(f"Select from where to continue from ({default})") or default)
+                if choice >= len(task_key) or choice < 0:
+                    raise ValueError
+                valid_choice = True
+            except ValueError:
+                output.error(f"Please, enter a number from {0} to {len(task_key) - 1}")
+
+        return choice
 
     #--------------------------------------------------------------------------
     # Password Collection Methods ---------------------------------------------
@@ -222,54 +255,19 @@ class Excalibur:
         output.warn("Previous session found\n")
         output.warn("Choose from where you would like to continue from\n")
         
-        default = None
-        for task in Excalibur.TASK_KEY:
-            if task not in self.status:
-                output.warn(f"[{task}] {Excalibur.TASK_KEY[task]}")
-            # Indicate that the task was completed
-            elif self.status[task]["Status"] == 0:
-                output.success(f"[{task}] {Excalibur.TASK_KEY[task]}")
-            elif self.status[task]["Status"] == 1:
-                output.error(f"[{task}] {Excalibur.TASK_KEY[task]} (Unfinished)")
-                default = task
-            
-        is_int = False
-        while not is_int:
-            try:
-                choice = int(output.get_input(f"Select a choice ({default})") or default)
-                is_int = True
-            except ValueError:
-                output.error("Please, enter a valid choice")
+        task_choice = self.notify_status(Excalibur.TASK_KEY, self.status)
 
-        for task in range(len(self.status)-1, choice-1, -1):
+        for task in range(len(self.status)-1, task_choice-1, -1):
             del self.status[task]
 
         if len(self.chroot_status) != 0:
             output.warn("It looks like the new root has been partially configured\n")
             output.warn("Choose from where you would like to continue from in the chroot\n")
 
-            default = None
-            for task in Excalibur.CHROOT_TASK_KEY:
-                if task not in self.chroot_status:
-                    output.warn(f"[{task}] {Excalibur.CHROOT_TASK_KEY[task]}")
-                # Indicate that the task was completed
-                elif self.chroot_status[task]["Status"] == 0:
-                    output.success(f"[{task}] {Excalibur.CHROOT_TASK_KEY[task]}")
-                elif self.chroot_status[task]["Status"] == 1:
-                    output.error(f"[{task}] {Excalibur.CHROOT_TASK_KEY[task]} (Unfinished)")
-                    default = task
-                
-            is_int = False
-            while not is_int:
-                try:
-                    choice = int(output.get_input(f"Select a choice ({default})") or default)
-                    is_int = True
-                except ValueError:
-                    output.error("Please, enter a valid choice")
+            chroot_task_choice = self.notify_status(Excalibur.CHROOT_TASK_KEY, self.chroot_status)
 
-            for task in range(len(self.chroot_status)-1, choice-1, -1):
+            for task in range(len(self.chroot_status)-1, chroot_task_choice-1, -1):
                 del self.chroot_status[task]
-
 
     #--------------------------------------------------------------------------
     # Storage Device Configuration Methods ------------------------------------
@@ -390,7 +388,7 @@ class Excalibur:
 
     def mount_filesystems(self):
         for uid in self.devices:
-            self.devices[uid].mount_filesystem(f"/mnt{self.devices[uid].mountpoint}")
+            self.devices[uid].mount_filesystem(f"{self.target}{self.devices[uid].mountpoint}")
 
     #--------------------------------------------------------------------------
 
@@ -481,6 +479,7 @@ class Excalibur:
             self.status[3]["Status"] = 0
 
         if self.args.PACSTRAP and 4 not in self.status:
+            print(self.args.PACSTRAP)
             self.status[4] = {
                 "Task" : Excalibur.TASK_KEY[3],
                 "Status" : 1
