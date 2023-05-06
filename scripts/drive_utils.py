@@ -46,7 +46,7 @@ class Formattable:
 
         if filesystem not in Formattable.FILESYSTEMS:
             output.warn(f"{filesystem} is not a valid filesystem")
-            exit(1)
+            raise Exception
 
         match filesystem:
             case "efi":
@@ -125,6 +125,12 @@ class Formattable:
                     f"mount -m {self.partition_path} {override_mount if override_mount else self.mountpoint}",
                     dry_run=self.dry_run
                 )
+
+    def __repr__(self):
+        return_str = f"{self.__class__.__name__}("
+        for attribute in self.__dict__:
+            return_str += f"{attribute}={self.__dict__[attribute]}, "
+        return f"{return_str.strip(', ')})"
 
 #------------------------------------------------------------------------------    
 
