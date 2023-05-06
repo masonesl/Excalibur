@@ -52,8 +52,13 @@ class Chroot:
             tuple: If wait_for_proc is True
             subprocess.Popen: If wait_for_proc is False
         """
+        if user:
+            full_command = f"chroot {self.target} sh -c 'su {user} -c \"{command}\"'"
+        else:
+            full_command = f"chroot {self.target} sh -c '{command}'"
+
         return cmd.execute(
-            f"chroot {f'--userspec={user} ' if user else ''}{self.target} sh -c '{command}'",
+            full_command,
             pipe_mode,
             self.dry_run,
             wait_for_proc
@@ -222,11 +227,11 @@ class Chroot:
     #--------------------------------------------------------------------------
 
     def configure_late_crypt(self, encrypted_block: Formattable):
-        crypttab_line = f"{encrypted_block.encrypt_label}\tUUID={encrypted_block.uuid}"
+        crypttab_line = f"{encrypted_block.encrypt_label}\tUUID={encrypted_block.encrypt_uuid}"
 
         if encrypted_block.uses_keyfile:
             cmd.execute(f"cp /tmp/{encrypted_block.encrypt_label}.key {self.target}/etc/cryptsetup-keys.d/")
-            crypttab_line += f"\t/etc/cryptsetup-keys.d/{encrypted_block.encrypt_label}.key"
+            crypttab_line += f"\t/etc/cryptsetup-keys.d/{encrypted_block.encrypt_label}.key\n"
 
         with open(f"{self.target}/etc/crypttab", "a") as crypttab_file:
             crypttab_file.write(crypttab_line)
@@ -257,19 +262,19 @@ class Chroot:
         self.installer = helper
 
         # Create a temporary user to run makepkg
-        self.__wrap_chroot("useradd -M -N aurtmp")
+        self.__wrap_chroot("useradd -N aurbuilder")
 
         # Create a drop in sudo configuration file for the temporary user
-        with open(f"{self.target}/etc/sudoers.d/aurtmp", "w") as sudoers:
-            sudoers.write("aurtmp ALL=(ALL:ALL) NOPASSWD: ALL")
+        with open(f"{self.target}/etc/sudoers.d/aurbuilder", "w") as sudoers:
+            sudoers.write("aurbuilder ALL=(ALL:ALL) NOPASSWD: ALL")
         
         # Download git and clone the AUR helper repo
         self.__wrap_chroot("pacman --noconfirm -S git")
-        self.__wrap_chroot(f"git clone {helper_url} /tmp/{helper}", user="aurtmp")
+        self.__wrap_chroot(f"git clone {helper_url} ~/{helper}", user="aurbuilder")
 
         # Build and install the helper
-        self.__wrap_chroot(f"cd /tmp/{helper} && makepkg -S", user="aurtmp")
-        self.__wrap_chroot(f"cd /tmp/{helper} && makepkg --noconfirm -i", user="aurtmp")
+        self.__wrap_chroot(f"cd ~/{helper} && makepkg -S", user="aurbuilder")
+        self.__wrap_chroot(f"cd ~/{helper} && makepkg --noconfirm -i", user="aurbuilder")
 
     #--------------------------------------------------------------------------
 
@@ -279,7 +284,7 @@ class Chroot:
         else:
             self.__wrap_chroot(
                 f"{self.installer.strip('-bin')} --noconfirm -Syu {' '.join(packages)}",
-                user="aurtmp"
+                user="aurbuilder"
             )
 
     #--------------------------------------------------------------------------
@@ -291,10 +296,10 @@ class Chroot:
     #--------------------------------------------------------------------------
 
     def exit(self):
-        # Clean up aur helper user if invoked
+        # Clean up aur helper user if needed
         if self.installer != "pacman":
-            self.__wrap_chroot("userdel aurtmp")
-            self.__wrap_chroot("rm /etc/sudoers.d/aurtmp")
+            self.__wrap_chroot("userdel aurbuilder")
+            self.__wrap_chroot("rm /etc/sudoers.d/aurbuilder")
 
         # Unmount all API filesystems from new root
         cmd.execute(f"umount -R {self.target}/proc/", dry_run=self.dry_run)
