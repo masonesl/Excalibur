@@ -32,7 +32,6 @@ class Chroot:
         self.installer = "pacman"
 
         self.system_groups     = self.__get_groups()
-        self.kernel_parameters = ""
 
     #--------------------------------------------------------------------------
 
@@ -70,15 +69,34 @@ class Chroot:
             hook (str): The actual hook to be added
         """
 
-        # This needs some work
-
         with open(f"{self.target}/etc/mkinitcpio.conf", "r") as initrd_conf_file:
-            initrd_conf_data = initrd_conf_file.read()
+            initrd_conf = initrd_conf_file.read()
+
+        initrd_conf = sub(
+            rf'\nHOOKS=\(.*{preceding_hook}',
+            rf'\g<0> {hook}',
+            initrd_conf
+        )
 
         with open(f"{self.target}/etc/mkinitcpio.conf", "w") as initrd_conf_file:
-            initrd_conf_file.write(initrd_conf_data.replace(
-                preceding_hook, f"{preceding_hook} {hook}"
-            ))
+            initrd_conf_file.write(initrd_conf)
+
+    #--------------------------------------------------------------------------
+
+    def __add_kernel_parameter(self, parameter: str):
+        with open(f"{self.target}/etc/default/grub", "r") as grub_file:
+            grub_config = grub_file.read()
+
+        grub_config = sub(
+            r'\nGRUB_CMDLINE_LINUX_DEFAULT="',
+            rf'\g<0>{parameter} ',
+            grub_config
+        )
+
+        with open(f"{self.target}/etc/default/grub", "w") as grub_file:
+            grub_file.write(grub_config)
+
+    #--------------------------------------------------------------------------
 
     def __get_groups(self):
         groups = []
@@ -197,7 +215,9 @@ class Chroot:
     def configure_early_crypt(self, encrypted_block: Formattable):
         self.__add_hook("block", "encrypt")
 
-        self.kernel_parameters += f"cryptdevice=UUID={encrypted_block.uuid}:{encrypted_block.encrypt_label}"
+        self.__add_kernel_parameter(
+            f"cryptdevice=UUID={encrypted_block.uuid}:{encrypted_block.encrypt_label}"
+        )
 
     #--------------------------------------------------------------------------
 
