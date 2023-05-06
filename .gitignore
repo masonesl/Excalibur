@@ -4,3 +4,4 @@ mnt/*
 pickle
 .vscode/launch.json
 config.yaml
+cache
