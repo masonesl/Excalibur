@@ -197,7 +197,7 @@ class Excalibur:
     def notify_status(task_key: dict, status: dict) -> int:
         line = lambda task, task_key : f"[{task}] {task_key[task]}"
 
-        default = None
+        default = 0
         for task in task_key:
             # Indicate that the task has not been tried
             if task not in status:
@@ -250,15 +250,16 @@ class Excalibur:
     #--------------------------------------------------------------------------
 
     def check_state(self, parser: argparse.ArgumentParser):
-        new_args = self.__parse_args(parser)
+        self.args = self.__parse_args(parser)
 
         output.warn("Previous session found\n")
         output.warn("Choose from where you would like to continue from\n")
         
         task_choice = self.notify_status(Excalibur.TASK_KEY, self.status)
 
-        for task in range(len(self.status)-1, task_choice-1, -1):
-            del self.status[task]
+        for task in range(len(self.status), task_choice-1, -1):
+            if task in self.status:
+                del self.status[task]
 
         if len(self.chroot_status) != 0:
             output.warn("It looks like the new root has been partially configured\n")
@@ -266,8 +267,9 @@ class Excalibur:
 
             chroot_task_choice = self.notify_status(Excalibur.CHROOT_TASK_KEY, self.chroot_status)
 
-            for task in range(len(self.chroot_status)-1, chroot_task_choice-1, -1):
-                del self.chroot_status[task]
+            for task in range(len(self.chroot_status), chroot_task_choice-1, -1):
+                if task in self.chroot_status:
+                    del self.chroot_status[task]
 
     #--------------------------------------------------------------------------
     # Storage Device Configuration Methods ------------------------------------
@@ -356,9 +358,10 @@ class Excalibur:
 
             if "load-early" in crypt_config and crypt_config["load-early"]:
                 if self.early_crypt_device:
-                    output.error(f"Cannot set '{self.devices[uid].partition_label}' to decrypt early.")
-                    output.error(f"'{self.early_crypt_device.partition_label}' is already set to decrypt early.")
-                    raise Exception
+                    if self.early_crypt_device.uuid != self.devices[uid].uuid:
+                        output.error(f"Cannot set '{self.devices[uid].partition_label}' to decrypt early.")
+                        output.error(f"'{self.early_crypt_device.partition_label}' is already set to decrypt early.")
+                        raise Exception
                 else:
                     self.early_crypt_device = self.devices[uid]
                     output.info(f"Device '{uid}' set to decrypt in early userspace", 1)
