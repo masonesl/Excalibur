@@ -295,6 +295,17 @@ class Chroot:
 
     #--------------------------------------------------------------------------
 
+    def configure_grub(self, efi_directory: str="/efi"):
+        self.__wrap_chroot(
+            f"grub-install --target=x86_64-efi --efi-directory={efi_directory} --bootloader-id=GRUB"
+        )
+
+        self.__wrap_chroot(
+            "grub-mkconfig -o /boot/grub/grub.cfg"
+        )
+
+    #--------------------------------------------------------------------------
+
     def exit(self):
         # Clean up aur helper user if needed
         if self.installer != "pacman":
