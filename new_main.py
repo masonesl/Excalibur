@@ -252,7 +252,9 @@ class Excalibur:
     def check_state(self, parser: argparse.ArgumentParser):
         self.args = self.__parse_args(parser)
 
-        output.warn("Previous session found\n")
+        print()
+
+        output.warn("Previous session found")
         output.warn("Choose from where you would like to continue from\n")
         
         task_choice = self.notify_status(Excalibur.TASK_KEY, self.status)
@@ -261,8 +263,10 @@ class Excalibur:
             if task in self.status:
                 del self.status[task]
 
+        print()
+
         if len(self.chroot_status) != 0:
-            output.warn("It looks like the new root has been partially configured\n")
+            output.warn("It looks like the new root has been partially configured")
             output.warn("Choose from where you would like to continue from in the chroot\n")
 
             chroot_task_choice = self.notify_status(Excalibur.CHROOT_TASK_KEY, self.chroot_status)
@@ -270,6 +274,26 @@ class Excalibur:
             for task in range(len(self.chroot_status), chroot_task_choice-1, -1):
                 if task in self.chroot_status:
                     del self.chroot_status[task]
+
+    #--------------------------------------------------------------------------
+
+    def start_task(self, task_code, chroot_task: bool=False):
+        if chroot_task:
+            self.chroot_status[task_code] = {
+                "Task" : Excalibur.CHROOT_TASK_KEY[task_code],
+                "Status" : 1
+            }
+        else:
+            self.status[task_code] = {
+                "Task" : Excalibur.TASK_KEY[task_code],
+                "Status" : 1
+            }
+
+    def finish_task(self, task_code, chroot_task: bool=False):
+        if chroot_task:
+            self.chroot_status[task_code]["Status"] = 0
+        else:
+            self.status[task_code]["Status"] = 0
 
     #--------------------------------------------------------------------------
     # Storage Device Configuration Methods ------------------------------------
@@ -394,11 +418,14 @@ class Excalibur:
             self.devices[uid].mount_filesystem(f"{self.target}{self.devices[uid].mountpoint}")
 
     #--------------------------------------------------------------------------
+    # Pacstrap Method to Make the New Root Usable -----------------------------
+    #--------------------------------------------------------------------------
 
     def bootstrap_newroot(self):
         # Tune pacman in the live environment
         if not self.dry_run:
             tune_pacman()
+
         update_pacman(self.dry_run)
 
         pacstrap(
@@ -417,6 +444,8 @@ class Excalibur:
         tune_pacman(self.target)
 
     #--------------------------------------------------------------------------
+    # Main Program Logic ------------------------------------------------------
+    #--------------------------------------------------------------------------
 
     def run(self):
         output.info("Running...")
@@ -430,46 +459,34 @@ class Excalibur:
                 output.info("Aborting...")
                 raise Exception
 
-            self.status[0] = {\
-                "Task": Excalibur.TASK_KEY[0],
-                "Status": 1
-            }
+            self.start_task(0)
 
             output.status("Creating partitions...")
             self.partition_drives()
             output.success("Partitions successfully created!")
 
-            self.status[0]["Status"] = 0
+            self.finish_task(0)
 
         if self.config.raid and self.args.CREATE_RAID_ARRAYS and 1 not in self.status:
-            self.status[1] = {
-                "Task" : Excalibur.TASK_KEY[1],
-                "Status" : 1
-            }
+            self.start_task(1)
 
             output.status("Creating RAID arrays...")
             self.setup_raid_arrays()
             output.success("RAID arrays successfully created!")
 
-            self.status[1]["Status"] = 0
+            self.finish_task(1)
 
         if self.config.crypt and self.args.CREATE_CRYPT and 2 not in self.status:
-            self.status[2] = {
-                "Task" : Excalibur.TASK_KEY[2],
-                "Status" : 1
-            }
+            self.start_task(2)
 
             output.status("Encrypting block devices...")
             self.encrypt_partitions()
             output.success("Block devices successfully encrypted!")
 
-            self.status[2]["Status"] = 0
+            self.finish_task(2)
 
         if self.config.filesystems and self.args.CREATE_FILESYSTEMS and 3 not in self.status:
-            self.status[3] = {
-                "Task" : Excalibur.TASK_KEY[3],
-                "Status" : 1
-            }
+            self.start_task(3)
 
             output.status("Creating filesystems...")
             self.create_filesystems()
@@ -479,35 +496,25 @@ class Excalibur:
             self.mount_filesystems()
             output.success("Filesystems successfully mounted!")
 
-            self.status[3]["Status"] = 0
+            self.finish_task(3)
 
         if self.args.PACSTRAP and 4 not in self.status:
-            print(self.args.PACSTRAP)
-            self.status[4] = {
-                "Task" : Excalibur.TASK_KEY[3],
-                "Status" : 1
-            }
+            self.start_task(4)
 
             output.status("Bootstrapping the new root...")
             self.bootstrap_newroot()
             output.success("New root sucessfully bootstrapped")
 
-            self.status[4]["Status"] = 0
+            self.finish_task(4)
 
         if self.args.CHROOT and 5 not in self.status:
-            self.status[5] = {
-                "Task" : Excalibur.TASK_KEY[5],
-                "Status" : 1
-            }
+            self.start_task(5)
 
             output.status("Creating chroot environment...")
             with Chroot(self.target, self.dry_run) as chroot_env:
 
                 if 0 not in self.chroot_status:
-                    self.chroot_status[0] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[0],
-                        "Status": 1
-                    }
+                    self.start_task(0, True)
 
                     output.substatus("Configuring clock...")
                     chroot_env.configure_clock(
@@ -516,13 +523,10 @@ class Excalibur:
                         self.config.clock["enable-ntp"]
                     )
 
-                    self.chroot_status[0]["Status"] = 0
+                    self.finish_task(0, True)
 
                 if 1 not in self.chroot_status:
-                    self.chroot_status[1] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[1],
-                        "Status": 1
-                    }
+                    self.start_task(1, True)
 
                     output.substatus("Configuring locales...")
                     chroot_env.configure_locales(
@@ -530,35 +534,26 @@ class Excalibur:
                         self.config.locales["locale-conf"]
                     )
 
-                    self.chroot_status[1]["Status"] = 0
+                    self.finish_task(1, True)
 
                 if 2 not in self.chroot_status:
-                    self.chroot_status[2] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[2],
-                        "Status": 1
-                    }
+                    self.start_task(2, True)
 
                     output.info("Set default /etc/hosts", 1)
                     chroot_env.configure_hosts()
 
-                    self.chroot_status[2]["Status"] = 0
+                    self.finish_task(2, True)
 
                 if 3 not in self.chroot_status:
-                    self.chroot_status[3] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[3],
-                        "Status": 1
-                    }
+                    self.start_task(3, True)
 
                     output.info(f"Set default hostname to {self.config.hostname}", 1)
                     chroot_env.set_hostname(self.config.hostname)
 
-                    self.chroot_status[3]["Status"] = 0
+                    self.finish_task(3, True)
 
                 if 4 not in self.chroot_status:
-                    self.chroot_status[4] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[4],
-                        "Status": 1
-                    }
+                    self.start_task(4, True)
 
                     output.substatus("Configuring users...")
                     output.info("Set root password", 2)
@@ -577,13 +572,10 @@ class Excalibur:
                             user_config["password"]
                         )
 
-                    self.chroot_status[4]["Status"] = 0
+                    self.finish_task(4, True)
 
-                if 5 not in self.chroot_status:
-                    self.chroot_status[5] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[5],
-                        "Status": 1
-                    }
+                if self.config.crypt and 5 not in self.chroot_status:
+                    self.start_task(5, True)
 
                     output.substatus("Configuring encrypted devices...")
                     if self.early_crypt_device:
@@ -592,54 +584,41 @@ class Excalibur:
                     for crypt_dev in self.late_crypt_devices:
                         chroot_env.configure_late_crypt(crypt_dev)
 
-                    self.chroot_status[5]["Status"] = 0
+                    self.finish_task(5, True)
 
-                if 6 not in self.chroot_status:
-                    self.chroot_status[6] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[6],
-                        "Status": 1
-                    }
+                if self.config.raid and 6 not in self.chroot_status:
+                    self.start_task(6, True)
                     
                     output.substatus("Configure RAID arrays...")
                     chroot_env.configure_raid()
 
-                    self.chroot_status[6]["Status"] = 0
+                    self.finish_task(6, True)
 
-                if 7 not in self.chroot_status:
-                    self.chroot_status[7] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[7],
-                        "Status": 1
-                    }
+                if self.config.aur_helper and 7 not in self.chroot_status:
+                    self.start_task(7, True)
 
                     output.substatus("Configuring AUR...")
                     chroot_env.enable_aur(self.config.aur_helper)
 
-                    self.chroot_status[7]["Status"] = 0
+                    self.finish_task(7, True)
 
-                if 8 not in self.chroot_status:
-                    self.chroot_status[8] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[8],
-                        "Status": 1
-                    }
+                if self.config.packages and 8 not in self.chroot_status:
+                    self.start_task(8, True)
 
                     output.substatus("Installing packages...")
                     chroot_env.install_packages(self.config.packages)
 
-                    self.chroot_status[8]["Status"] = 0
+                    self.finish_task(8, True)
 
-
-                if 9 not in self.chroot_status:
-                    self.chroot_status[9] = {
-                        "Task": Excalibur.CHROOT_TASK_KEY[9],
-                        "Status": 1
-                    }
+                if self.config.services and 9 not in self.chroot_status:
+                    self.start_task(9, True)
 
                     output.substatus("Enabling services...")
                     chroot_env.enable_services(self.config.services)
 
-                    self.chroot_status[9]["Status"] = 0
+                    self.finish_task(9, True)
 
-            self.status[5]["Status"] = 0
+            self.finish_task(5)
 
 #------------------------------------------------------------------------------
 
