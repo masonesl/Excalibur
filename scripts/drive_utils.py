@@ -50,16 +50,21 @@ class Formattable:
 
         match filesystem:
             case "efi":
-                mkfs_command = "mkfs.vfat -F32 -n"
+                mkfs_command = "mkfs.vfat -F32"
+                if label:
+                    mkfs_command += f" -n '{label}'"
             case "swap":
-                mkfs_command = "mkswap -L"
+                mkfs_command = "mkswap"
             case _:
-                mkfs_command = f"mkfs.{filesystem} -L"
+                mkfs_command = f"mkfs.{filesystem}"
 
-        mkfs_command += f" {label}"
+        # Add a label if specified
+        if label and filesystem != "efi":
+            mkfs_command += f"-L '{label}'"
 
         # Append any other command options
-        mkfs_command += f" {options}"
+        if options:
+            mkfs_command += f" {options}"
 
         # Specify the block device to format
         mkfs_command += f" {self.partition_path}"
@@ -126,6 +131,15 @@ class Formattable:
                     dry_run=self.dry_run
                 )
 
+    #--------------------------------------------------------------------------
+
+    def set_as_btrfs_device(self, label: str):
+        self.filesystem = "btrfs"
+        self.label = label
+        self.uuid = self.__get_blkid("UUID")
+
+    #--------------------------------------------------------------------------
+
     def __repr__(self):
         return_str = f"{self.__class__.__name__}("
         for attribute in self.__dict__:
@@ -142,37 +156,40 @@ class RaidArray(Formattable):
                        options   : str="",
                        dry_run   : bool=False):
 
-        mdadm_command = f"mdadm --create --metadata=1.2 "
+        mdadm_command = f"mdadm --create --metadata=1.2"
 
         # Set the RAID level
-        mdadm_command += f"--level={level} "
+        mdadm_command += f" --level={level}"
 
         # Set the number of RAID devices
-        mdadm_command += f"--raid-devices={len(devices)} "
+        mdadm_command += f" --raid-devices={len(devices)}"
 
         # Set the RAID array name
-        mdadm_command += f"--name={array_name} "
+        mdadm_command += f" --name={array_name}"
 
         # Set the array to have the same name regardless of host
-        mdadm_command += "--homehost=any" 
+        mdadm_command += " --homehost=any" 
 
         # Add any additional options to command
-        mdadm_command += options
+        if options:
+            mdadm_command += f" {options}"
 
-        mdadm_command += f" /dev/md/{array_name} "
+        mdadm_command += f" /dev/md/{array_name}"
 
         # Allow for either devices or partitions to be added to the array
         for device in devices:
             try:
-                mdadm_command += f"{device.device_path} "
+                mdadm_command += f" {device.device_path}"
             except AttributeError:
-                mdadm_command += f"{device.partition_path} "
+                mdadm_command += f" {device.partition_path}"
 
         cmd.execute(mdadm_command, dry_run=dry_run)
 
-        super().__init__(device_path=f"/dev/md/{array_name}", 
-                         partition_label=array_name,
-                         dry_run=dry_run)
+        super().__init__(
+            device_path=f"/dev/md/{array_name}",
+            partition_label=array_name,
+            dry_run=dry_run
+        )
 
 #------------------------------------------------------------------------------
 
@@ -194,18 +211,18 @@ class Partition(Formattable):
             start_sector = "0"
             end_sector   = f"+{partition_size}"
 
-        sgdisk_command = f"sgdisk -n {partition_number}:{start_sector}:{end_sector} "
+        sgdisk_command = f"sgdisk -n {partition_number}:{start_sector}:{end_sector}"
 
         # Partition type code command portion
         if type_code:
-            sgdisk_command += f"-t {partition_number}:{type_code} "
+            sgdisk_command += f" -t {partition_number}:{type_code}"
 
         # Partition label command portion
         if partition_label:
-            sgdisk_command += f"-c {partition_number}:'{partition_label}' "
+            sgdisk_command += f" -c {partition_number}:'{partition_label}'"
 
         # Specify the drive via its device path
-        sgdisk_command += device_path
+        sgdisk_command += f" {device_path}"
 
         cmd.execute(sgdisk_command, dry_run=dry_run)
 
