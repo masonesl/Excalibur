@@ -53,7 +53,7 @@ class Chroot:
             subprocess.Popen: If wait_for_proc is False
         """
         if user:
-            full_command = f"chroot {self.target} sh -c 'su {user} -c \"{command}\"'"
+            full_command = f"chroot {self.target} su {user} -c '{command}'"
         else:
             full_command = f"chroot {self.target} sh -c '{command}'"
 
@@ -181,6 +181,7 @@ class Chroot:
                              home    : str,
                              comment : str,
                              groups  : list,
+                             sudo    : bool | str,
                              password: str):
         
         self.__wrap_chroot(f"useradd -m{f' -d {home}' if home else ''} {username}")
@@ -214,6 +215,15 @@ class Chroot:
         passwd_proc = self.__wrap_chroot(f"passwd {username}", 7, wait_for_proc=False)
         if not self.dry_run:
             passwd_proc.communicate(f"{password}\n{password}".encode())
+            
+        if sudo:
+            if sudo == "nopass":
+                sudo_user_conf = f"{username} ALL=(ALL:ALL) NOPASSWD: ALL"
+            else:
+                sudo_user_conf = f"{username} ALL=(ALL:ALL) ALL"
+                
+            with open(f"{self.target}/etc/sudoers.d/{username}", "w") as sudoers:
+                sudoers.write(sudo_user_conf)
 
     #--------------------------------------------------------------------------
 
@@ -262,7 +272,7 @@ class Chroot:
         self.installer = helper
 
         # Create a temporary user to run makepkg
-        self.__wrap_chroot("useradd -N aurbuilder")
+        self.__wrap_chroot("useradd -N -m aurbuilder")
 
         # Create a drop in sudo configuration file for the temporary user
         with open(f"{self.target}/etc/sudoers.d/aurbuilder", "w") as sudoers:
