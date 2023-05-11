@@ -60,7 +60,7 @@ class Formattable:
 
         # Add a label if specified
         if label and filesystem != "efi":
-            mkfs_command += f"-L '{label}'"
+            mkfs_command += f" -L '{label}'"
 
         # Append any other command options
         if options:
@@ -93,8 +93,8 @@ class Formattable:
             # Create the keyfile in /tmp
             cmd.execute(f"dd bs=512 count=4 if=/dev/random of=/tmp/{mapper_name}.key iflag=fullblock")
 
-            cryptsetup_format_command = f"cryptsetup --key-file /root/ramfs/{mapper_name}.key -q"
-            cryptsetup_open_command   = f"cryptsetup --key-file /root/ramfs/{mapper_name}.key"
+            cryptsetup_format_command = f"cryptsetup --key-file /tmp/{mapper_name}.key -q"
+            cryptsetup_open_command   = f"cryptsetup --key-file /tmp/{mapper_name}.key"
             
             self.uses_keyfile = True
         else:
@@ -112,9 +112,9 @@ class Formattable:
         if not self.dry_run:
             luksopen_proc.communicate(password.encode())
 
+        self.encrypt_uuid    = self.__get_blkid("UUID")
         self.real_path       = self.partition_path
         self.partition_path  = f"/dev/mapper/{mapper_name}"
-        self.encrypt_uuid    = self.__get_blkid("UUID")
         self.encrypt_label   = mapper_name
 
     #--------------------------------------------------------------------------
@@ -126,15 +126,21 @@ class Formattable:
             case "swap":
                 cmd.execute(f"swapon {self.partition_path}", dry_run=self.dry_run)
             case _:
-                cmd.execute(
-                    f"mount -m {self.partition_path} {override_mount if override_mount else self.mountpoint}",
-                    dry_run=self.dry_run
-                )
+                match self.mountpoint:
+                    case None:
+                        return
+                    case "btrfs_":
+                        return
+                    case _:
+                        cmd.execute(
+                            f"mount -m {self.partition_path} {override_mount}{self.mountpoint}",
+                            dry_run=self.dry_run
+                        )
 
     #--------------------------------------------------------------------------
 
     def set_as_btrfs_device(self, label: str):
-        self.filesystem = "btrfs"
+        self.filesystem = "btrfs_"
         self.label = label
         self.uuid = self.__get_blkid("UUID")
 
