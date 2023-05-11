@@ -5,3 +5,4 @@ pickle
 .vscode/launch.json
 config.yaml
 cache
+__pycache__/*

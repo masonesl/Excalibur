@@ -672,26 +672,4 @@ class Excalibur:
 
 #------------------------------------------------------------------------------
 
-if __name__ == "__main__":
-    main_parser = argparse.ArgumentParser(
-        prog="excalibur",
-        description="Template-based Arch Linux installer"
-    )
-
-    if os.path.isfile("cache"):
-        with open("cache", "rb") as cache_file:
-            main = pickle.load(cache_file)
-            main.check_state(main_parser)
-    else:
-        main = Excalibur(main_parser)
-
-    try:
-        main.run()
-    except:
-        output.error(f"Program Error\n{traceback.format_exc()}")
-    finally:
-        if (i := output.get_input("Would you like to save the program state? (Y/n)").lower()) == "y" or i == "":
-            with open("cache", "wb") as cache_file:
-                pickle.dump(main, cache_file)
-
 # EOF

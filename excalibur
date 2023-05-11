@@ -1,0 +1,39 @@
+#!/bin/python
+
+
+from main import Excalibur
+
+import traceback
+
+from os       import path
+from argparse import ArgumentParser
+from pickle   import (
+    load as pload,
+    dump as pdump
+)
+
+import scripts.output_utils as output
+
+#------------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    main_parser = ArgumentParser(
+        prog="excalibur",
+        description="YAML template-based Arch Linux installer"
+    )
+    
+    if path.isfile("cache"):
+        with open("cache", "rb") as cache_file:
+            main = pload(cache_file)
+            main.check_state(main_parser)
+    else:
+        main = Excalibur(main_parser)
+        
+    try:
+        main.run()
+    except:
+        output.error(f"Program Error\n{traceback.format_exc()}")
+    finally:
+        if (i := output.get_input("Would you like to save the program state? (Y/n)").lower()) == "y" or i == "":
+            with open("cache", "wb") as cache_file:
+                pdump(main, cache_file)
