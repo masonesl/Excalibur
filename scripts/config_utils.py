@@ -30,6 +30,7 @@ class Defaults(Enum):
         "filesystems" : {},
         "clock" : {},
         "locales" : {},
+        "users" : {},
         "hostname" : "myhostname",
         "aur-helper" : Choice("", "paru", "paru-bin", "yay", "yay-bin"),
         "packages" : [],
@@ -39,7 +40,8 @@ class Defaults(Enum):
         "boot" : {},
         "networkmanager" : Choice(True, False),
         "ssh" : Choice(True, False),
-        "reflector" : Choice(True, False)
+        "reflector" : Choice(True, False),
+        "btrfs" : {}
     }
 
     DRIVE = {
@@ -70,7 +72,7 @@ class Defaults(Enum):
     }
 
     FILESYSTEM = {
-        "filesystem": Choice(Required(), "efi", "swap", "ext4", "xfs"),
+        "filesystem": Choice(Required(), "efi", "swap", "ext4", "xfs", "btrfs"),
         "label": None,
         "mountpoint": None
     }
@@ -93,12 +95,28 @@ class Defaults(Enum):
         "home"  : "",
         "comment" : "",
         "groups" : [],
-        "password" : "password"
+        "password" : "password",
+        "sudo" : Choice(False, True, "nopass")
     }
 
     BOOT = {
         "bootloader" : "grub",
-        "efi" : Choice(True, False)
+        "efi" : Choice(True, False, "nopass")
+    }
+    
+    BTRFS = {
+        "label" : None,
+        "data-raid" : "",
+        "metadata-raid" : "",
+        "devices" : [],
+        "subvolumes" : {},
+        "options" : ""
+    }
+    
+    BTRFS_SUBVOL = {
+        "mountpoint" : "",
+        "compression" : "",
+        "options" : []
     }
 
 #------------------------------------------------------------------------------
@@ -213,7 +231,26 @@ class Config:
         self.ssh            = config["ssh"]
         self.reflector      = config["reflector"]
 
-        print(self.__dict__)
+        self.btrfs = {}
+        for btrfs_dev in config["btrfs"]:
+            btrfs_config = config["btrfs"][btrfs_dev]
+            
+            self.btrfs[btrfs_dev] = self.fill_defaults(
+                btrfs_config,
+                Defaults.BTRFS,
+                ["btrfs", btrfs_dev]
+            )
+            
+            for subvol in btrfs_config["subvolumes"]:
+                subvol_config = btrfs_config["subvolumes"][subvol]
+                
+                self.btrfs[btrfs_dev]["subvolumes"][subvol] = self.fill_defaults(
+                    subvol_config,
+                    Defaults.BTRFS_SUBVOL,
+                    ["btrfs", btrfs_dev, "subvolumes", subvol]
+                )
+                
+    #--------------------------------------------------------------------------
 
     def fill_defaults(self, config: dict,
                             default_config: Defaults,
