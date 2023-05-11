@@ -101,7 +101,7 @@ class Defaults(Enum):
 
     BOOT = {
         "bootloader" : "grub",
-        "efi" : Choice(True, False, "nopass")
+        "efi" : Choice(True, False)
     }
     
     BTRFS = {
