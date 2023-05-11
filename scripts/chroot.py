@@ -27,6 +27,10 @@ class Chroot:
         # Copy DNS details to new root
         cmd.execute(f"cp /etc/resolv.conf {target_mountpoint}/etc/resolv.conf", dry_run=dry_run)
 
+        # Temporarily override pacman initcpio hook so that it isn't run multiple times
+        cmd.execute(f"mkdir {target_mountpoint}/etc/pacman.d/hooks", dry_run=dry_run)
+        cmd.execute(f"touch {target_mountpoint}/etc/pacman.d/hooks/90-mkinitcpio-install.hook", dry_run=dry_run)
+
         self.target    = target_mountpoint
         self.dry_run   = dry_run
         self.installer = "pacman"
@@ -321,6 +325,8 @@ class Chroot:
         if self.installer != "pacman":
             self.__wrap_chroot("userdel aurbuilder")
             self.__wrap_chroot("rm /etc/sudoers.d/aurbuilder")
+            
+        cmd.execute(f"rm {self.target}/etc/pacman.d/hooks/90-mkinitcpio-install.hook", dry_run=self.dry_run)
 
         # Unmount all API filesystems from new root
         cmd.execute(f"umount -R {self.target}/proc/", dry_run=self.dry_run)
