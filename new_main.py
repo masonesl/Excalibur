@@ -12,6 +12,7 @@ from scripts.pacstrap      import tune_pacman, update_pacman, pacstrap
 from scripts.drive_utils   import Drive, RaidArray
 from scripts.config_utils  import Config
 from scripts.chroot        import Chroot
+from scripts.btrfs         import Btrfs
 
 import scripts.command_utils as cmd
 import scripts.output_utils  as output
@@ -157,7 +158,7 @@ class Excalibur:
     #--------------------------------------------------------------------------
 
     @staticmethod
-    def sort_by_mountpoint(partition) -> int:
+    def sort_by_mountpoint(filesystem) -> int:
         """To be used as a key for sorting by mountpoint length to ensure
         that filesystems are mounted in the correct order
         ie. /home should be mounted before /home/bob
@@ -168,14 +169,20 @@ class Excalibur:
         Returns:
             int: _description_
         """
-        if not partition[1].mountpoint:
+        # Check for btrfs tuple
+        if type(filesystem[1]) == Btrfs:
+            mountpoint = filesystem[1].get_mountpoint(filesystem[0])
+        else:
+            mountpoint = filesystem[1].mountpoint or None
+        
+        if not mountpoint:
             return -1
-        elif partition[1].mountpoint == "/":
+        elif mountpoint == "/":
             return 0
-        elif partition[1].filesystem == "swap":
+        elif mountpoint == "swap":
             return -1
         else:
-            return len(partition[1].mountpoint.split("/"))
+            return len(mountpoint.split("/"))
 
     #--------------------------------------------------------------------------
 
@@ -408,14 +415,55 @@ class Excalibur:
 
             output.success(f"Device '{uid}' has been successfully formatted!", 1)
 
+        for btrfs_uid in self.config.btrfs:
+            btrfs_config = self.config.btrfs[btrfs_uid]
+            
+            btrfs_devices = []
+            for uid in btrfs_config["devices"]:
+                btrfs_devices.append(self.devices[uid])
+                
+            self.devices[btrfs_uid] = Btrfs(
+                btrfs_devices,
+                btrfs_config["data-raid"],
+                btrfs_config["metadata-raid"],
+                btrfs_config["label"],
+                btrfs_config["options"],
+                self.dry_run
+            )
+            
+            cmd.execute(
+                f"mount -m /dev/disk/by-uuid/{self.devices[btrfs_uid].uuid} {self.target}/btrfs",
+                dry_run=self.dry_run
+            )
+            
+            for subvol in btrfs_config["subvolumes"]:
+                subvol_config = btrfs_config["subvolumes"][subvol]
+                
+                self.devices[btrfs_uid].create_subvolume(
+                    subvol,
+                    subvol_config["mountpoint"],
+                    subvol_config["compression"],
+                    subvol_config["options"],
+                    f"{self.target}/btrfs"
+                )
+                
+                self.devices[subvol] = self.devices[btrfs_uid]
+                
+            cmd.execute(f"umount {self.target}/btrfs", dry_run=self.dry_run)
+            cmd.execute(f"rmdir {self.target}/btrfs", dry_run=self.dry_run)
+                
         # Sort mountable devices by their mountpoints 
         self.devices = dict(sorted(self.devices.items(), key=self.sort_by_mountpoint))
+
 
     #--------------------------------------------------------------------------
 
     def mount_filesystems(self):
         for uid in self.devices:
-            self.devices[uid].mount_filesystem(f"{self.target}{self.devices[uid].mountpoint}")
+            if type(self.devices[uid]) is Btrfs:
+                self.devices[uid].mount_subvolume(uid, self.target)
+            else:
+                self.devices[uid].mount_filesystem(self.target)
 
     #--------------------------------------------------------------------------
     # Pacstrap Method to Make the New Root Usable -----------------------------
@@ -569,6 +617,7 @@ class Excalibur:
                             user_config["home"],
                             user_config["comment"],
                             user_config["groups"],
+                            user_config["sudo"],
                             user_config["password"]
                         )
 
