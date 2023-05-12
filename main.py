@@ -39,7 +39,8 @@ class Excalibur:
         6: "Configure RAID",
         7: "Enable AUR",
         8: "Install Packages",
-        9: "Enable Services"
+        9: "Enable Services",
+        10: "Configure Boot"
     }
 
     def __init__(self, parser: argparse.ArgumentParser):
@@ -89,6 +90,10 @@ class Excalibur:
 
         self.status = {}
         self.chroot_status = {}
+        
+        self.efi_device = ""
+        self.root_uuid = ""
+        self.root_subvol = None
 
     def __parse_args(self, parser: argparse.ArgumentParser) -> argparse.Namespace:
         parser.add_argument("-Z", "--zap-all",
@@ -267,7 +272,7 @@ class Excalibur:
         
         task_choice = self.notify_status(Excalibur.TASK_KEY, self.status)
 
-        for task in range(len(self.status), task_choice-1, -1):
+        for task in range(len(self.status)+1, task_choice-1, -1):
             if task in self.status:
                 del self.status[task]
 
@@ -279,7 +284,7 @@ class Excalibur:
 
             chroot_task_choice = self.notify_status(Excalibur.CHROOT_TASK_KEY, self.chroot_status)
 
-            for task in range(len(self.chroot_status), chroot_task_choice-1, -1):
+            for task in range(len(self.chroot_status)+1, chroot_task_choice-1, -1):
                 if task in self.chroot_status:
                     del self.chroot_status[task]
 
@@ -413,6 +418,14 @@ class Excalibur:
             self.devices[uid].new_filesystem(filesystem_config["filesystem"],
                                              filesystem_config["label"],
                                              filesystem_config["mountpoint"])
+            
+            # If the filesystem is efi, set its mountpoint as the efi directory
+            if filesystem_config["filesystem"] == "efi":
+                self.efi_device = self.devices[uid]
+                
+            # Get the root UUID if its mounpoint is /
+            if filesystem_config["mountpoint"] == "/":
+                self.root_uuid = self.devices[uid].uuid
 
             output.success(f"Device '{uid}' has been successfully formatted!", 1)
 
@@ -450,8 +463,13 @@ class Excalibur:
                 
                 self.devices[subvol] = self.devices[btrfs_uid]
                 
+                if subvol_config["mountpoint"] == "/":
+                    self.root_subvol = subvol
+                    self.root_uuid = self.devices[btrfs_uid].uuid
+                
             cmd.execute(f"umount {self.target}/btrfs", dry_run=self.dry_run)
-            cmd.execute(f"rmdir {self.target}/btrfs", dry_run=self.dry_run)
+            
+        cmd.execute(f"rmdir {self.target}/btrfs", dry_run=self.dry_run)
                 
         # Sort mountable devices by their mountpoints 
         self.devices = dict(sorted(self.devices.items(), key=self.sort_by_mountpoint))
@@ -560,7 +578,7 @@ class Excalibur:
             self.start_task(5)
 
             output.status("Creating chroot environment...")
-            with Chroot(self.target, self.dry_run) as chroot_env:
+            with Chroot(self.target, self.dry_run, self.efi_device.mountpoint) as chroot_env:
 
                 if 0 not in self.chroot_status:
                     self.start_task(0, True)
@@ -667,6 +685,28 @@ class Excalibur:
                     chroot_env.enable_services(self.config.services)
 
                     self.finish_task(9, True)
+                    
+                if 10 not in self.chroot_status:
+                    self.start_task(10, True)
+                    
+                    output.substatus("Configuring boot...")
+                    
+                    if self.config.boot["bootloader"] == "efistub":
+                        chroot_env.set_default_kernel_params(
+                            self.root_uuid,
+                            self.root_subvol
+                        )
+                        
+                        chroot_env.generate_uki()
+                        
+                        chroot_env.configure_efistub(
+                            self.efi_device.partition_path[:-1],
+                            self.efi_device.partition_path[-1],
+                            self.config.boot["label"],
+                            self.config.kernel
+                        )
+                        
+                    self.finish_task(10, True)
 
             self.finish_task(5)
 
