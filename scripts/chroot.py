@@ -1,4 +1,8 @@
-from re import sub, findall
+from re import (
+    subn as resubn,
+    sub  as resub
+)
+from os import listdir
 
 import command_utils as cmd
 import output_utils  as output
@@ -9,7 +13,12 @@ from drive_utils import Formattable
 
 class Chroot:
 
-    def __init__(self, target_mountpoint: str="/mnt", dry_run=False):
+    def __init__(
+        self,
+        target_mountpoint: str,
+        dry_run: bool,
+        efi_directory: str
+    ):
         # Mount all temporary API filesystems
         cmd.execute(f"mount -t proc /proc {target_mountpoint}/proc/", dry_run=dry_run)
         cmd.execute(f"mount --rbind /sys {target_mountpoint}/sys/", dry_run=dry_run)
@@ -34,6 +43,7 @@ class Chroot:
         self.target    = target_mountpoint
         self.dry_run   = dry_run
         self.installer = "pacman"
+        self.efi_dir   = efi_directory
 
         self.system_groups     = self.__get_groups()
 
@@ -81,7 +91,7 @@ class Chroot:
         with open(f"{self.target}/etc/mkinitcpio.conf", "r") as initrd_conf_file:
             initrd_conf = initrd_conf_file.read()
 
-        initrd_conf = sub(
+        initrd_conf = resub(
             rf'\nHOOKS=\(.*{preceding_hook}',
             rf'\g<0> {hook}',
             initrd_conf
@@ -91,19 +101,16 @@ class Chroot:
             initrd_conf_file.write(initrd_conf)
 
     #--------------------------------------------------------------------------
-
+            
     def __add_kernel_parameter(self, parameter: str):
-        with open(f"{self.target}/etc/default/grub", "r") as grub_file:
-            grub_config = grub_file.read()
-
-        grub_config = sub(
-            r'\nGRUB_CMDLINE_LINUX_DEFAULT="',
-            rf'\g<0>{parameter} ',
-            grub_config
-        )
-
-        with open(f"{self.target}/etc/default/grub", "w") as grub_file:
-            grub_file.write(grub_config)
+        with open(f"{self.target}/etc/kernel/cmdline", "a") as cmdline_file:
+            cmdline_file.write(f" {parameter}")
+            
+    def __get_kernel_parameters(self):
+        with open(f"{self.target}/etc/kernel/cmdline", "r") as cmdline_file:
+            kernel_cmdline = cmdline_file.read()
+            
+        return kernel_cmdline
 
     #--------------------------------------------------------------------------
 
@@ -235,7 +242,7 @@ class Chroot:
         self.__add_hook("block", "encrypt")
 
         self.__add_kernel_parameter(
-            f"cryptdevice=UUID={encrypted_block.uuid}:{encrypted_block.encrypt_label}"
+            f"cryptdevice=UUID={encrypted_block.encrypt_uuid}:{encrypted_block.encrypt_label}"
         )
 
     #--------------------------------------------------------------------------
@@ -306,18 +313,106 @@ class Chroot:
     def enable_services(self, services: list):
         for service in services:
             self.__wrap_chroot(f"systemctl enable {service}")
+            
+    #--------------------------------------------------------------------------
+    
+    def set_default_kernel_params(
+        self,
+        root_uuid: str,
+        root_subvol: str
+    ):
+        
+        # Specify the root uuid
+        cmdline = f"root=UUID={root_uuid}"
+        
+        # Specify the BTRFS root subvolume if applicable
+        if root_subvol:
+            cmdline += f" rootflags=subvol={root_subvol}"
+            
+        self.__add_kernel_parameter(cmdline)
+        
+    def generate_uki(self):
+        presets_dir = f"{self.target}/etc/mkinitcpio.d/"
+        
+        cmd.execute(f"mkdir -p {self.efi_dir}/EFI/Linux", dry_run=self.dry_run)
+        
+        self.generate_initramfs()
+        
+        for preset in listdir(presets_dir):
+            with open(presets_dir+preset, "r") as preset_file:
+                preset_config = preset_file.read()
+                
+            # Uncomment default and fallback UKI lines in preset and set the efi directory
+            preset_config = resub(
+                r'\n#(default_uki=")/efi',
+                rf'\n\g<1>{self.efi_dir}',
+                preset_config
+            )
+            
+            preset_config = resub(
+                r'\n#(fallback_uki=")/efi',
+                rf'\n\g<1>{self.efi_dir}',
+                preset_config
+            )
+            
+            # Comment out the initramfs default and fallback image lines
+            preset_config = resub(
+                r'\n(default_image)',
+                r'\n#\g<1>',
+                preset_config
+            )
+            
+            preset_config = resub(
+                r'\n(fallback_image)',
+                r'\n#\g<1>',
+                preset_config
+            )
+            
+            with open(presets_dir+preset, "w") as preset_file:
+                preset_file.write(preset_config)
 
     #--------------------------------------------------------------------------
 
-    def configure_grub(self, efi_directory: str="/efi"):
+    def configure_grub(self):
+        with open(f"{self.target}/etc/default/grub", "r") as grub_file:
+            grub_config = grub_file.read()
+
+        kernel_cmdline = self.__get_kernel_parameters()
+
+        grub_config = resub(
+            r'\nGRUB_CMDLINE_LINUX_DEFAULT="',
+            rf'\g<0>{kernel_cmdline}',
+            grub_config
+        )
+
+        with open(f"{self.target}/etc/default/grub", "w") as grub_file:
+            grub_file.write(grub_config)
+            
         self.__wrap_chroot(
-            f"grub-install --target=x86_64-efi --efi-directory={efi_directory} --bootloader-id=GRUB"
+            f"grub-install --target=x86_64-efi --efi-directory={self.efi_dir} --bootloader-id=GRUB"
         )
 
         self.__wrap_chroot(
             "grub-mkconfig -o /boot/grub/grub.cfg"
         )
-
+        
+    #--------------------------------------------------------------------------
+    
+    def configure_efistub(
+        self,
+        disk: str,
+        partition: int,
+        boot_label: str,
+        kernel: str
+    ):
+        
+        self.__wrap_chroot(
+            f"efibootmgr --create --disk {disk} --part {partition}" \
+                +f" --label \"{boot_label}\"" \
+                +f" --loader '/EFI/Linux/arch-linux{f'-{kernel}' if kernel else ''}.efi'" \
+                +" --unicode"
+        )
+            
     #--------------------------------------------------------------------------
 
     def exit(self):
