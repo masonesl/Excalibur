@@ -100,8 +100,9 @@ class Defaults(Enum):
     }
 
     BOOT = {
-        "bootloader" : "grub",
-        "efi" : Choice(True, False)
+        "bootloader" : Choice("efistub", "grub"),
+        "efi" : Choice(True, False),
+        "label" : "Arch Linux"
     }
     
     BTRFS = {
