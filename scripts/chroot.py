@@ -2,6 +2,7 @@ from re import (
     subn as resubn,
     sub  as resub
 )
+
 from os import listdir
 
 import command_utils as cmd
@@ -16,29 +17,43 @@ class Chroot:
     def __init__(
         self,
         target_mountpoint: str,
-        dry_run: bool,
-        efi_directory: str
+        dry_run          : bool,
+        efi_directory    : str
     ):
+
+        mount = lambda mount_options, mount_dir : \
+            cmd.execute(
+                f"mount {mount_options} {target_mountpoint}{mount_dir}",
+                dry_run=dry_run
+            )
+      
         # Mount all temporary API filesystems
-        cmd.execute(f"mount -t proc /proc {target_mountpoint}/proc/", dry_run=dry_run)
-        cmd.execute(f"mount --rbind /sys {target_mountpoint}/sys/", dry_run=dry_run)
-        cmd.execute(f"mount --make-rslave {target_mountpoint}/sys/", dry_run=dry_run)
-        cmd.execute(f"mount --rbind /dev {target_mountpoint}/dev/", dry_run=dry_run)
-        cmd.execute(f"mount --make-rslave {target_mountpoint}/dev/", dry_run=dry_run)
-        cmd.execute(f"mount --rbind /run {target_mountpoint}/run/", dry_run=dry_run)
-        cmd.execute(f"mount --make-slave {target_mountpoint}/run/", dry_run=dry_run)
+        mount("-t proc /proc", "/proc/")
+        mount("--rbind /sys", "/sys/")
+        mount("--make-rslave", "/sys/")
+        mount("--rbind /dev", "/dev/")
+        mount("--make-rslave", "/dev")
+        mount("--rbind /run", "/run/")
+        mount("--make-slave", "/run/")
 
         # Mount EFI variables for UEFI bootloader configuration
-        cmd.execute(
-            f"mount --rbind /sys/firmware/efi/efivars {target_mountpoint}/sys/firmware/efi/efivars",
-            dry_run=dry_run)
+        mount("--rbind /sys/firmware/efi/efivars", "/sys/firmware/efi/efivars")
 
         # Copy DNS details to new root
-        cmd.execute(f"cp /etc/resolv.conf {target_mountpoint}/etc/resolv.conf", dry_run=dry_run)
+        cmd.execute(
+            f"cp /etc/resolv.conf {target_mountpoint}/etc/resolv.conf",
+            dry_run=dry_run
+        )
 
         # Temporarily override pacman initcpio hook so that it isn't run multiple times
-        cmd.execute(f"mkdir {target_mountpoint}/etc/pacman.d/hooks", dry_run=dry_run)
-        cmd.execute(f"touch {target_mountpoint}/etc/pacman.d/hooks/90-mkinitcpio-install.hook", dry_run=dry_run)
+        cmd.execute(
+            f"mkdir -p {target_mountpoint}/etc/pacman.d/hooks",
+            dry_run=dry_run
+        )
+        cmd.execute(
+            f"touch {target_mountpoint}/etc/pacman.d/hooks/90-mkinitcpio-install.hook",
+            dry_run=dry_run
+        )
 
         self.target    = target_mountpoint
         self.dry_run   = dry_run
@@ -54,7 +69,13 @@ class Chroot:
 
     #--------------------------------------------------------------------------
 
-    def __wrap_chroot(self, command: str, pipe_mode: int=3, wait_for_proc=True, user: str=""):
+    def __wrap_chroot(
+        self,
+        command      : str,
+        pipe_mode    : int  = 3,
+        wait_for_proc: bool = True, 
+        user         : str  = ""
+    ):
         """Execute a command in the chroot environment
 
         Args:
@@ -104,7 +125,7 @@ class Chroot:
             
     def __add_kernel_parameter(self, parameter: str):
         with open(f"{self.target}/etc/kernel/cmdline", "a") as cmdline_file:
-            cmdline_file.write(f" {parameter}")
+            cmdline_file.write(f"{parameter} ")
             
     def __get_kernel_parameters(self):
         with open(f"{self.target}/etc/kernel/cmdline", "r") as cmdline_file:
@@ -124,19 +145,24 @@ class Chroot:
 
     #--------------------------------------------------------------------------
 
-    def configure_clock(self, timezone: str="",
-                              hardware_utc: bool=True,
-                              enable_ntp: bool=True):
+    def configure_clock(
+        self,
+        timezone    : str,
+        hardware_utc: bool,
+        enable_ntp  : bool
+    ):
 
         # Create a symlink from the timezone file to /etc/localtime
-        if timezone:
-            cmd.execute(
-                f"ln -sf {self.target}/usr/share/zoneinfo/{timezone} {self.target}/etc/localtime",
-                dry_run=self.dry_run
-            )
+        cmd.execute(
+            f"ln -sf {self.target}/usr/share/zoneinfo/{timezone}" \
+                + f"{self.target}/etc/localtime",
+            dry_run=self.dry_run
+        )
 
         # Configure the hardware clock to system time (with UTC if desired)
-        self.__wrap_chroot(f"hwclock --systohc {'--utc' if hardware_utc else ''}")
+        self.__wrap_chroot(
+            f"hwclock --systohc {'--utc' if hardware_utc else ''}"
+        )
 
         # Enable systemd-timesyncd if desired
         if enable_ntp:
@@ -144,8 +170,11 @@ class Chroot:
 
     #--------------------------------------------------------------------------
 
-    def configure_locales(self, locale_gen: list=["en_US.UTF-8 UTF-8"],
-                                locale_conf: str="en_US.UTF-8"):
+    def configure_locales(
+        self,
+        locale_gen : list,
+        locale_conf: str
+    ):
 
         # Uncomment each specified locale in /etc/locale.gen
         with open(f"{self.target}/etc/locale.gen", "r") as locale_gen_file:
@@ -174,28 +203,38 @@ class Chroot:
 
     #--------------------------------------------------------------------------
 
-    def set_hostname(self, hostname: str="myhostname"):
+    def set_hostname(self, hostname: str):
         with open(f"{self.target}/etc/hostname", "w") as hostname_file:
             hostname_file.write(hostname)
 
     #--------------------------------------------------------------------------
 
     def set_root_password(self, root_password: str):
-        root_password_proc = self.__wrap_chroot("passwd", 7, wait_for_proc=False)
+        root_password_proc = self.__wrap_chroot(
+            "passwd", 7, wait_for_proc=False
+        )
+        
         if not self.dry_run:
-            root_password_proc.communicate(f"{root_password}\n{root_password}".encode())
+            root_password_proc.communicate(
+                f"{root_password}\n{root_password}".encode()
+            )
 
     #--------------------------------------------------------------------------
 
-    def configure_user(self, username: str,
-                             shell   : str,
-                             home    : str,
-                             comment : str,
-                             groups  : list,
-                             sudo    : bool | str,
-                             password: str):
+    def configure_user(
+        self,
+        username: str,
+        shell   : str,
+        home    : str,
+        comment : str,
+        groups  : list,
+        sudo    : bool | str,
+        password: str
+    ):
         
-        self.__wrap_chroot(f"useradd -m{f' -d {home}' if home else ''} {username}")
+        self.__wrap_chroot(
+            f"useradd -m{f' -d {home}' if home else ''} {username}"
+        )
 
         if shell:
             # Try to install shell if it does not exist
@@ -205,12 +244,16 @@ class Chroot:
                 for shell_line in shells_file.readlines()[3:]:
                     if shell_line.strip() == shell:
                         shell_installed = True
+                        break
 
                 if not shell_installed:
-                    self.__wrap_chroot(f"pacman --noconfirm -S {shell.split('/')[-1]}")
+                    self.__wrap_chroot(
+                        f"pacman --noconfirm -S {shell.split('/')[-1]}"
+                    )
                     
             self.__wrap_chroot(f"usermod -s {shell} {username}")
 
+        # Add a comment if specified
         if comment:
             self.__wrap_chroot(f"usermod -c {comment} {username}")
 
@@ -221,6 +264,7 @@ class Chroot:
                     self.__wrap_chroot(f"groupadd {group}")
                     self.system_groups.append(group)
                 
+                # Add user to the group
                 self.__wrap_chroot(f"usermod -a -G {group}, {username}")
 
         passwd_proc = self.__wrap_chroot(f"passwd {username}", 7, wait_for_proc=False)
@@ -248,11 +292,17 @@ class Chroot:
     #--------------------------------------------------------------------------
 
     def configure_late_crypt(self, encrypted_block: Formattable):
-        crypttab_line = f"{encrypted_block.encrypt_label}\tUUID={encrypted_block.encrypt_uuid}"
+        crypttab_line = \
+            f"{encrypted_block.encrypt_label}" \
+                + f"\tUUID={encrypted_block.encrypt_uuid}"
 
         if encrypted_block.uses_keyfile:
-            cmd.execute(f"cp /tmp/{encrypted_block.encrypt_label}.key {self.target}/etc/cryptsetup-keys.d/")
-            crypttab_line += f"\t/etc/cryptsetup-keys.d/{encrypted_block.encrypt_label}.key\n"
+            cmd.execute(
+                f"cp /tmp/{encrypted_block.encrypt_label}.key " \
+                    + f"{self.target}/etc/cryptsetup-keys.d/"
+            )
+            crypttab_line += \
+                f"\t/etc/cryptsetup-keys.d/{encrypted_block.encrypt_label}.key\n"
 
         with open(f"{self.target}/etc/crypttab", "a") as crypttab_file:
             crypttab_file.write(crypttab_line)
@@ -331,7 +381,9 @@ class Chroot:
             
         self.__add_kernel_parameter(cmdline)
         
-    def generate_uki(self):
+    #--------------------------------------------------------------------------
+        
+    def generate_ukis(self):
         presets_dir = f"{self.target}/etc/mkinitcpio.d/"
         
         cmd.execute(f"mkdir -p {self.efi_dir}/EFI/Linux", dry_run=self.dry_run)
@@ -389,7 +441,8 @@ class Chroot:
             grub_file.write(grub_config)
             
         self.__wrap_chroot(
-            f"grub-install --target=x86_64-efi --efi-directory={self.efi_dir} --bootloader-id=GRUB"
+            "grub-install --target=x86_64-efi " \
+                + f"--efi-directory={self.efi_dir} --bootloader-id=GRUB"
         )
 
         self.__wrap_chroot(
@@ -406,12 +459,31 @@ class Chroot:
         kernel: str
     ):
         
-        self.__wrap_chroot(
-            f"efibootmgr --create --disk {disk} --part {partition}" \
-                +f" --label \"{boot_label}\"" \
-                +f" --loader '/EFI/Linux/arch-linux{f'-{kernel}' if kernel else ''}.efi'" \
-                +" --unicode"
-        )
+        efibootmgr_command = "efibootmgr --create"
+        
+        # Add the disk and partition arguments
+        efibootmgr_command += f" --disk {disk} --part {partition}"
+        
+        # Add the label that will show up as a boot entry
+        efibootmgr_command += f" --label \"{boot_label}\""
+        
+        # Add the path to the efi executable
+        efi_executable = f"arch-linux{f'-{kernel}' if kernel else ''}.efi"
+        
+        efibootmgr_command += f" --loader '/EFI/Linux/{efi_executable}"
+        
+        # Add the unicode argument
+        efibootmgr_command += " --unicode"
+        
+        self.__wrap_chroot(efibootmgr_command)
+        
+    #--------------------------------------------------------------------------
+    
+    def generate_fstab(self):
+        mounts = cmd.execute(f"genfstab -U {self.target}", 6, self.dry_run)[0]
+        
+        with open(f"{self.target}/etc/fstab", "a") as fstab_file:
+            fstab_file.write(mounts)
             
     #--------------------------------------------------------------------------
 
@@ -421,7 +493,10 @@ class Chroot:
             self.__wrap_chroot("userdel aurbuilder")
             self.__wrap_chroot("rm /etc/sudoers.d/aurbuilder")
             
-        cmd.execute(f"rm {self.target}/etc/pacman.d/hooks/90-mkinitcpio-install.hook", dry_run=self.dry_run)
+        cmd.execute(
+            f"rm {self.target}/etc/pacman.d/hooks/90-mkinitcpio-install.hook",
+            dry_run=self.dry_run
+        )
 
         # Unmount all API filesystems from new root
         cmd.execute(f"umount -R {self.target}/proc/", dry_run=self.dry_run)
