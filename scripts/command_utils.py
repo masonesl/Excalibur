@@ -3,6 +3,7 @@ from shlex      import split as shsplit
 
 import output_utils as output
 
+#------------------------------------------------------------------------------
 
 STD_CODES = {
     "stdout" : 4,
@@ -10,8 +11,48 @@ STD_CODES = {
     "stdin"  : 1
 }
 
+#------------------------------------------------------------------------------
 
-def execute(command: str, pipe_mode: int=2, dry_run=False, wait_for_proc=True, print_errors=True):
+def execute(
+    command: str,
+    pipe_mode: int=2,
+    dry_run=False,
+    wait_for_proc=True,
+    print_errors=True
+) -> Popen | tuple[bytes, bytes]:
+    """Execute a command
+
+    Parameters
+    ----------
+    command : str
+        Command to be executed
+    pipe_mode : int, optional
+        Octal code to specify which streams should be pipes, by default 2
+        
+            1 corresponds to stdin  \n
+            2 corresponds to stderr \n
+            4 corresponds to stdout \n
+            
+    dry_run : bool, optional
+        If true, only print the command instead of executing, by default False
+    wait_for_proc : bool, optional
+        If true, wait for the process to finish before returning, by default True
+    print_errors : bool, optional
+        If true, print errors if the return code is not 0, by default True
+
+    Returns
+    -------
+    tuple[bytes, bytes]
+        If wait_for_proc is True, return the result of process.communicate
+    Popen
+        If wait_for_proc is Falst, return the process itself
+
+    Raises
+    ------
+    Exception
+        _description_
+    """
+    
     if dry_run:
         output.print_command(command)
         return
@@ -41,7 +82,10 @@ def execute(command: str, pipe_mode: int=2, dry_run=False, wait_for_proc=True, p
         output.error(f"Command '{command}' failed to execute")
         print(proc_comm[1].decode())
 
-        if (i := output.get_input("Would you like to continue? (N/y)").lower()) == "n" or i == "":
+        if (i := output.get_input(
+            "Would you like to continue? (N/y)"
+            ).lower()) == "n" or i == "":
+            
             raise Exception
 
     return proc_comm
