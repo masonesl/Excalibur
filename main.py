@@ -40,7 +40,8 @@ class Excalibur:
         7: "Enable AUR",
         8: "Install Packages",
         9: "Enable Services",
-        10: "Configure Boot"
+        10: "Configure Boot",
+        11: "Generate fstab"
     }
 
     def __init__(self, parser: argparse.ArgumentParser):
@@ -347,17 +348,22 @@ class Excalibur:
 
                 partition_config = drive_config["partitions"][uid]
 
-                self.drives[drive].new_partition(partition_size=partition_config["size"],
-                                                 start_sector=partition_config["start-sector"],
-                                                 end_sector=partition_config["end-sector"],
-                                                 type_code=partition_config["type-code"],
-                                                 partition_label=partition_config["partition-label"],
-                                                 uid=uid,
-                                                 dry_run=self.dry_run)
+                self.drives[drive].new_partition(
+                    partition_size  = partition_config["size"],
+                    start_sector    = partition_config["start-sector"],
+                    end_sector      = partition_config["end-sector"],
+                    type_code       = partition_config["type-code"],
+                    partition_label = partition_config["partition-label"],
+                    uid             = uid,
+                    dry_run         = self.dry_run
+                )
 
                 self.devices[uid] = self.drives[drive][uid]
             
-            output.success(f"Drive '{drive}' has been successfully partitioned!", 1)
+            output.success(
+                f"Drive '{drive}' has been successfully partitioned!",
+                1
+            )
 
     #--------------------------------------------------------------------------
 
@@ -369,17 +375,26 @@ class Excalibur:
             raid_array_devices = []
 
             for raid_device_uid in raid_config["devices"]:
-                output.substatus(f"Adding device '{raid_device_uid}' to array '{uid}'", 2)
+                output.substatus(
+                    f"Adding device '{raid_device_uid}' to array '{uid}'",
+                    2
+                )
+                
                 raid_array_devices.append(self.devices[raid_device_uid])
             
-            self.devices[uid] = RaidArray(devices=raid_array_devices,
-                                          array_name=raid_config["array-name"],
-                                          level=raid_config["level"],
-                                          dry_run=self.dry_run)
+            self.devices[uid] = RaidArray(
+                devices    = raid_array_devices,
+                array_name = raid_config["array-name"],
+                level      = raid_config["level"],
+                dry_run    = self.dry_run
+            )
 
             self.raid_arrays.append(self.devices[uid])
 
-            output.success(f"RAID array '{uid}' has been successfully created!", 1)
+            output.success(
+                f"RAID array '{uid}' has been successfully created!",
+                1
+            )
 
     #--------------------------------------------------------------------------
 
@@ -389,9 +404,11 @@ class Excalibur:
 
             crypt_config = self.config.crypt[uid]
 
-            self.devices[uid].encrypt_partition(crypt_config["password"],
-                                                crypt_config["crypt-label"],
-                                                crypt_config["generate-keyfile"])
+            self.devices[uid].encrypt_partition(
+                crypt_config["password"],
+                crypt_config["crypt-label"],
+                crypt_config["generate-keyfile"]
+            )
 
             if "load-early" in crypt_config and crypt_config["load-early"]:
                 if self.early_crypt_device:
@@ -401,11 +418,17 @@ class Excalibur:
                         raise Exception
                 else:
                     self.early_crypt_device = self.devices[uid]
-                    output.info(f"Device '{uid}' set to decrypt in early userspace", 1)
+                    output.info(
+                        f"Device '{uid}' set to decrypt in early userspace",
+                        1
+                    )
             else:
                 self.late_crypt_devices.append(self.devices[uid])
 
-            output.success(f"Device '{uid}' has been successfully encrypted!", 1)
+            output.success(
+                f"Device '{uid}' has been successfully encrypted!",
+                1
+            )
 
     #--------------------------------------------------------------------------
 
@@ -415,9 +438,11 @@ class Excalibur:
 
             output.substatus(f"Creating filesystem on '{uid}'...")
 
-            self.devices[uid].new_filesystem(filesystem_config["filesystem"],
-                                             filesystem_config["label"],
-                                             filesystem_config["mountpoint"])
+            self.devices[uid].new_filesystem(
+                filesystem_config["filesystem"],
+                filesystem_config["label"],
+                filesystem_config["mountpoint"]
+            )
             
             # If the filesystem is efi, set its mountpoint as the efi directory
             if filesystem_config["filesystem"] == "efi":
@@ -427,7 +452,10 @@ class Excalibur:
             if filesystem_config["mountpoint"] == "/":
                 self.root_uuid = self.devices[uid].uuid
 
-            output.success(f"Device '{uid}' has been successfully formatted!", 1)
+            output.success(
+                f"Device '{uid}' has been successfully formatted!",
+                1
+            )
 
         for btrfs_uid in self.config.btrfs:
             btrfs_config = self.config.btrfs[btrfs_uid]
@@ -446,7 +474,8 @@ class Excalibur:
             )
             
             cmd.execute(
-                f"mount -m /dev/disk/by-uuid/{self.devices[btrfs_uid].uuid} {self.target}/btrfs",
+                f"mount -m /dev/disk/by-uuid/{self.devices[btrfs_uid].uuid} " \
+                    + f"{self.target}/btrfs",
                 dry_run=self.dry_run
             )
             
@@ -472,8 +501,12 @@ class Excalibur:
         cmd.execute(f"rmdir {self.target}/btrfs", dry_run=self.dry_run)
                 
         # Sort mountable devices by their mountpoints 
-        self.devices = dict(sorted(self.devices.items(), key=self.sort_by_mountpoint))
-
+        self.devices = dict(
+            sorted(
+                self.devices.items(),
+                key=self.sort_by_mountpoint
+            )
+        )
 
     #--------------------------------------------------------------------------
 
@@ -697,16 +730,25 @@ class Excalibur:
                             self.root_subvol
                         )
                         
-                        chroot_env.generate_uki()
+                        chroot_env.generate_ukis()
                         
                         chroot_env.configure_efistub(
-                            self.efi_device.partition_path[:-1],
-                            self.efi_device.partition_path[-1],
+                            self.efi_device.partition_path[:-1], # Assumes there are no more than 9 partitions
+                            self.efi_device.partition_path[-1],  #
                             self.config.boot["label"],
                             self.config.kernel
                         )
                         
                     self.finish_task(10, True)
+                    
+                if 11 not in self.chroot_status:
+                    self.start_task(11, True)
+                    
+                    output.substatus("Generating fstab...")
+                    
+                    chroot_env.generate_fstab()
+                    
+                    self.finish_task(11, True)
 
             self.finish_task(5)
 
