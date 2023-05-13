@@ -5,6 +5,13 @@ import output_utils as output
 
 #------------------------------------------------------------------------------
 
+class CommandFailedException(Exception):
+    
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+
+#------------------------------------------------------------------------------
+
 STD_CODES = {
     "stdout" : 4,
     "stderr" : 2,
@@ -49,8 +56,8 @@ def execute(
 
     Raises
     ------
-    Exception
-        _description_
+    CommandFailedException
+        Raised if the specified commands exits with a non-zero return code and the user chooses not to continue
     """
     
     if dry_run:
@@ -68,9 +75,12 @@ def execute(
             std[std_code] = PIPE
             pipe_mode -= STD_CODES[std_code]
 
-    process = Popen(shsplit(command), stdout=std["stdout"],
-                                      stderr=std["stderr"],
-                                      stdin =std["stdin"])
+    process = Popen(
+        shsplit(command),
+        stdout=std["stdout"],
+        stderr=std["stderr"],
+        stdin =std["stdin"]
+    )
     
     if not wait_for_proc:
         return process
@@ -86,7 +96,7 @@ def execute(
             "Would you like to continue? (N/y)"
             ).lower()) == "n" or i == "":
             
-            raise Exception
+            raise CommandFailedException(command)
 
     return proc_comm
 
