@@ -21,11 +21,12 @@ STD_CODES = {
 #------------------------------------------------------------------------------
 
 def execute(
-    command: str,
-    pipe_mode: int=2,
-    dry_run=False,
-    wait_for_proc=True,
-    print_errors=True
+    command       : str,
+    pipe_mode     : int  = 2,
+    dry_run       : bool = False,
+    wait_for_proc : bool = True,
+    print_errors  : bool = True,
+    \
 ) -> Popen | tuple[bytes, bytes]:
     """Execute a command
 
@@ -52,7 +53,7 @@ def execute(
     tuple[bytes, bytes]
         If wait_for_proc is True, return the result of process.communicate
     Popen
-        If wait_for_proc is Falst, return the process itself
+        If wait_for_proc is False, return the process itself
 
     Raises
     ------
