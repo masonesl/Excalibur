@@ -74,7 +74,8 @@ class Chroot:
         command      : str,
         pipe_mode    : int  = 3,
         wait_for_proc: bool = True, 
-        user         : str  = ""
+        user         : str  = "",
+        \
     ):
         """Execute a command in the chroot environment
 
@@ -120,14 +121,32 @@ class Chroot:
 
         with open(f"{self.target}/etc/mkinitcpio.conf", "w") as initrd_conf_file:
             initrd_conf_file.write(initrd_conf)
+            
+    #--------------------------------------------------------------------------
+    
+    def __add_module(self, module: str):
+        
+        with open(f"{self.target}/etc/mkinitcpio.conf", "r") as initrd_conf_file:
+            initrd_conf = initrd_conf_file.read()
+            
+        initrd_conf = resub(
+            r'\nMODULES=\([^)]*',
+            rf'\g<0> {module}',
+            initrd_conf
+        )
+        
+        with open(f"{self.target}/etc/mkinitcpio.conf", "w") as initrd_conf_file:
+            initrd_conf_file.write(initrd_conf)
 
     #--------------------------------------------------------------------------
             
     def __add_kernel_parameter(self, parameter: str):
         with open(f"{self.target}/etc/kernel/cmdline", "a") as cmdline_file:
             cmdline_file.write(f"{parameter} ")
-            
-    def __get_kernel_parameters(self):
+    
+    #--------------------------------------------------------------------------
+    
+    def __get_kernel_parameters(self) -> str:
         with open(f"{self.target}/etc/kernel/cmdline", "r") as cmdline_file:
             kernel_cmdline = cmdline_file.read()
             
