@@ -58,7 +58,7 @@ def execute(
     Raises
     ------
     CommandFailedException
-        Raised if the specified commands exits with a non-zero return code and the user chooses not to continue
+        Raised if the specified command exits with a non-zero return code and the user chooses not to continue
     """
     
     if dry_run:
