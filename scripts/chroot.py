@@ -489,7 +489,7 @@ class Chroot:
         # Add the path to the efi executable
         efi_executable = f"arch-linux{f'-{kernel}' if kernel else ''}.efi"
         
-        efibootmgr_command += f" --loader '/EFI/Linux/{efi_executable}"
+        efibootmgr_command += f" --loader '/EFI/Linux/{efi_executable}'"
         
         # Add the unicode argument
         efibootmgr_command += " --unicode"
