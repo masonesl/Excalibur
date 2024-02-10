@@ -10,7 +10,7 @@ import output_utils  as output
 
 from drive_utils import Formattable
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 class Chroot:
 
@@ -21,11 +21,10 @@ class Chroot:
         efi_directory    : str
     ):
 
-        mount = lambda mount_options, mount_dir : \
+        def mount(options: str, dir: str):
             cmd.execute(
-                f"mount {mount_options} {target_mountpoint}{mount_dir}",
-                dry_run=dry_run
-            )
+                    f"mount {options} {target_mountpoint}{dir}",
+                    dry_run=dry_run)
       
         # Mount all temporary API filesystems
         mount("-t proc /proc", "/proc/")
@@ -62,12 +61,12 @@ class Chroot:
 
         self.system_groups     = self.__get_groups()
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def __enter__(self):
         return self
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def __wrap_chroot(
         self,
@@ -100,7 +99,7 @@ class Chroot:
             wait_for_proc
         )
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def __add_hook(self, preceding_hook: str, hook: str):
         """Add a hook to /etc/mkinitcpio.conf
@@ -122,7 +121,7 @@ class Chroot:
         with open(f"{self.target}/etc/mkinitcpio.conf", "w") as initrd_conf_file:
             initrd_conf_file.write(initrd_conf)
             
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     
     def __add_module(self, module: str):
         
@@ -138,13 +137,13 @@ class Chroot:
         with open(f"{self.target}/etc/mkinitcpio.conf", "w") as initrd_conf_file:
             initrd_conf_file.write(initrd_conf)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
             
     def __add_kernel_parameter(self, parameter: str):
         with open(f"{self.target}/etc/kernel/cmdline", "a") as cmdline_file:
             cmdline_file.write(f"{parameter} ")
     
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     
     def __get_kernel_parameters(self) -> str:
         with open(f"{self.target}/etc/kernel/cmdline", "r") as cmdline_file:
@@ -152,7 +151,7 @@ class Chroot:
             
         return kernel_cmdline
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def __get_groups(self):
         groups = []
@@ -162,7 +161,7 @@ class Chroot:
 
         return groups
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def configure_clock(
         self,
@@ -187,7 +186,7 @@ class Chroot:
         if enable_ntp:
             self.__wrap_chroot("systemctl enable systemd-timesyncd")
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def configure_locales(
         self,
@@ -212,7 +211,7 @@ class Chroot:
         with open(f"{self.target}/etc/locale.conf", "w") as locale_conf_file:
             locale_conf_file.write(f"LANG={locale_conf}")
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def configure_hosts(self):
         # Add localhost entries in /etc/hosts for both IPv4 and IPv6
@@ -220,13 +219,13 @@ class Chroot:
             hosts_file.write("127.0.0.1\tlocalhost\n")
             hosts_file.write("::1\t\tlocalhost\n")
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def set_hostname(self, hostname: str):
         with open(f"{self.target}/etc/hostname", "w") as hostname_file:
             hostname_file.write(hostname)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def set_root_password(self, root_password: str):
         root_password_proc = self.__wrap_chroot(
@@ -238,7 +237,7 @@ class Chroot:
                 f"{root_password}\n{root_password}".encode()
             )
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def configure_user(
         self,
@@ -299,7 +298,7 @@ class Chroot:
             with open(f"{self.target}/etc/sudoers.d/{username}", "w") as sudoers:
                 sudoers.write(sudo_user_conf)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def configure_early_crypt(self, encrypted_block: Formattable):
         self.__add_hook("block", "encrypt")
@@ -308,17 +307,17 @@ class Chroot:
             f"cryptdevice=UUID={encrypted_block.encrypt_uuid}:{encrypted_block.encrypt_label}"
         )
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def configure_late_crypt(self, encrypted_block: Formattable):
         crypttab_line = \
             f"{encrypted_block.encrypt_label}" \
-                + f"\tUUID={encrypted_block.encrypt_uuid}"
+            + f"\tUUID={encrypted_block.encrypt_uuid}"
 
         if encrypted_block.uses_keyfile:
             cmd.execute(
                 f"cp /tmp/{encrypted_block.encrypt_label}.key " \
-                    + f"{self.target}/etc/cryptsetup-keys.d/"
+                + f"{self.target}/etc/cryptsetup-keys.d/"
             )
             crypttab_line += \
                 f"\t/etc/cryptsetup-keys.d/{encrypted_block.encrypt_label}.key\n"
@@ -326,7 +325,7 @@ class Chroot:
         with open(f"{self.target}/etc/crypttab", "a") as crypttab_file:
             crypttab_file.write(crypttab_line)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def configure_raid(self):
         self.__wrap_chroot("pacman --noconfirm -S mdadm")
@@ -340,12 +339,12 @@ class Chroot:
         # Add the mdadm_udev hook to the initramfs to load RAID arrays on boot
         self.__add_hook("block", "mdadm_udev")
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def generate_initramfs(self):
         self.__wrap_chroot("mkinitcpio -P")
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def enable_aur(self, helper: str):
         helper_url = f"https://aur.archlinux.org/{helper}.git"
@@ -366,7 +365,7 @@ class Chroot:
         self.__wrap_chroot(f"cd ~/{helper} && makepkg -S", user="aurbuilder")
         self.__wrap_chroot(f"cd ~/{helper} && makepkg --noconfirm -i", user="aurbuilder")
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def install_packages(self, packages: list):
         if self.installer == "pacman":
@@ -377,13 +376,13 @@ class Chroot:
                 user="aurbuilder"
             )
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def enable_services(self, services: list):
         for service in services:
             self.__wrap_chroot(f"systemctl enable {service}")
             
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     
     def set_default_kernel_params(
         self,
@@ -400,7 +399,7 @@ class Chroot:
             
         self.__add_kernel_parameter(cmdline)
         
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
         
     def generate_ukis(self):
         presets_dir = f"{self.target}/etc/mkinitcpio.d/"
@@ -410,7 +409,7 @@ class Chroot:
         self.generate_initramfs()
         
         for preset in listdir(presets_dir):
-            with open(presets_dir+preset, "r") as preset_file:
+            with open(presets_dir + preset, "r") as preset_file:
                 preset_config = preset_file.read()
                 
             # Uncomment default and fallback UKI lines in preset and set the efi directory
@@ -442,7 +441,7 @@ class Chroot:
             with open(presets_dir+preset, "w") as preset_file:
                 preset_file.write(preset_config)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def configure_grub(self):
         with open(f"{self.target}/etc/default/grub", "r") as grub_file:
@@ -468,7 +467,7 @@ class Chroot:
             "grub-mkconfig -o /boot/grub/grub.cfg"
         )
         
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     
     def configure_efistub(
         self,
@@ -496,7 +495,7 @@ class Chroot:
         
         self.__wrap_chroot(efibootmgr_command)
         
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     
     def generate_fstab(self):
         mounts = cmd.execute(f"genfstab -U {self.target}", 6, self.dry_run)[0]
@@ -504,7 +503,7 @@ class Chroot:
         with open(f"{self.target}/etc/fstab", "a") as fstab_file:
             fstab_file.write(mounts)
             
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def exit(self):
         # Clean up aur helper user if needed
@@ -523,7 +522,7 @@ class Chroot:
         cmd.execute(f"umount -R {self.target}/dev/", dry_run=self.dry_run)
         cmd.execute(f"umount -R {self.target}/run/", dry_run=self.dry_run)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.exit()
