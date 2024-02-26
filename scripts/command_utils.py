@@ -27,7 +27,7 @@ def execute(
     wait_for_proc : bool = True,
     print_errors  : bool = True,
     \
-) -> Popen | tuple[bytes, bytes]:
+) -> Popen | tuple[bytes, bytes] | None:
     """Execute a command
 
     Parameters
