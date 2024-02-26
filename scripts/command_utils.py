@@ -1,5 +1,7 @@
 from subprocess import Popen, PIPE
 from shlex      import split as shsplit
+from enum       import Enum
+from typing     import Self, Union, TypedDict
 
 import output_utils as output
 
@@ -18,11 +20,27 @@ STD_CODES = {
     "stdin"  : 1
 }
 
+class PipeOpts(Enum):
+    STDOUT = 4
+    STDERR = 2
+    STDIN  = 1
+
+    def __and__(self, other: int) -> int:
+        return self.value.real & other
+
+    def __or__(self, other: Self) -> int:
+        return self.value.real | other.value.real
+
+class PipeOptsDict(TypedDict):
+    stdout: Union[int, None]
+    stderr: Union[int, None]
+    stdin:  Union[int, None]
+
 #------------------------------------------------------------------------------
 
 def execute(
     command       : str,
-    pipe_mode     : int  = 2,
+    pipe_mode     : Union[int, PipeOpts] = PipeOpts.STDOUT,
     dry_run       : bool = False,
     wait_for_proc : bool = True,
     print_errors  : bool = True,
@@ -65,16 +83,18 @@ def execute(
         output.print_command(command)
         return
 
-    std = {
-        "stdout" : None,
-        "stderr" : None,
-        "stdin"  : None
-    }
+    std: PipeOptsDict = {
+            "stdout" : None,
+            "stderr" : None,
+            "stdin"  : None,
+        }
 
-    for std_code in STD_CODES:
-        if pipe_mode - STD_CODES[std_code] >= 0:
+    if isinstance(pipe_mode, PipeOpts):
+        pipe_mode = pipe_mode.value.real
+
+    for pipe_opt, std_code in zip(PipeOpts, std):
+        if pipe_opt & pipe_mode == pipe_opt.value.real:
             std[std_code] = PIPE
-            pipe_mode -= STD_CODES[std_code]
 
     process = Popen(
         shsplit(command),
