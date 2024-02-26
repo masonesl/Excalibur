@@ -13,7 +13,7 @@ class Btrfs:
         metadata_raid: str,
         label: str,
         options: str,
-        dry_run: bool=False
+        dry_run: bool = False
     ):
 
         mkfs_command = "mkfs.btrfs"
