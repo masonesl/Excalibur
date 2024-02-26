@@ -286,7 +286,7 @@ class Chroot:
                 self.__wrap_chroot(f"usermod -a -G {group}, {username}")
 
         passwd_proc = self.__wrap_chroot(f"passwd {username}", 7, wait_for_proc=False)
-        if not self.dry_run:
+        if not self.dry_run and isinstance(passwd_proc, subprocess.Popen):
             passwd_proc.communicate(f"{password}\n{password}".encode())
             
         if sudo:
@@ -332,7 +332,7 @@ class Chroot:
 
         # Scan for the current RAID arrays and their configurations and add them to the mdadm.conf file
         raid_conf = cmd.execute("mdadm --detail --scan", 6, self.dry_run)
-        if not self.dry_run:
+        if not self.dry_run and isinstance(raid_conf, tuple):
             with open(f"{self.target}/etc/mdadm.conf", "a") as mdadm_conf_file:
                 mdadm_conf_file.write(raid_conf[0].decode())
 
@@ -498,10 +498,13 @@ class Chroot:
     # --------------------------------------------------------------------------
     
     def generate_fstab(self):
-        mounts = cmd.execute(f"genfstab -U {self.target}", 6, self.dry_run)[0]
+        genfstab = cmd.execute(f"genfstab -U {self.target}", 6, self.dry_run)
         
-        with open(f"{self.target}/etc/fstab", "a") as fstab_file:
-            fstab_file.write(mounts)
+        if isinstance(genfstab, tuple):
+            mounts = genfstab[0].decode()
+        
+            with open(f"{self.target}/etc/fstab", "a") as fstab_file:
+                fstab_file.write(mounts)
             
     # --------------------------------------------------------------------------
 
