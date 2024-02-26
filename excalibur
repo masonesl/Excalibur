@@ -31,9 +31,12 @@ if __name__ == "__main__":
         
     try:
         main.run()
-    except:
+    except Exception:
         output.error(f"Program Error\n{traceback.format_exc()}")
     finally:
-        if (i := output.get_input("Would you like to save the program state? (Y/n)").lower()) == "y" or i == "":
+        if (i := output.get_input(
+                "Would you like to save the program state? (Y/n)"
+                ).lower()) == "y" or i == "":
+
             with open("cache", "wb") as cache_file:
                 pdump(main, cache_file)
