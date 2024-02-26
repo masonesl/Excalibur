@@ -20,6 +20,7 @@ import scripts.output_utils  as output
 
 class Excalibur:
 
+    # @TODO - redo how progress is tracked
     TASK_KEY = {
         0: "Partition Drives",
         1: "Create RAID arrays",
@@ -195,6 +196,7 @@ class Excalibur:
     @staticmethod
     def get_password(message: str, repeat_message: str) -> str:
         passwords_match = False
+        password: str = ""
         while not passwords_match:
             password = getpass(f"{message}: ")
             if getpass(f"{repeat_message}: ") == password:
