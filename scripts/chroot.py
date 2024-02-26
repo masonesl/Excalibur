@@ -3,12 +3,14 @@ from re import (
     sub  as resub
 )
 
+from typing import Union
 from os import listdir
 import subprocess
 
 import command_utils as cmd
 import output_utils  as output
 
+from command_utils import PipeOpts
 from drive_utils import Formattable
 
 # ------------------------------------------------------------------------------
@@ -72,7 +74,7 @@ class Chroot:
     def __wrap_chroot(
         self,
         command      : str,
-        pipe_mode    : int  = 3,
+        pipe_mode    : int = PipeOpts.STDIN | PipeOpts.STDOUT,
         wait_for_proc: bool = True, 
         user         : str  = "",
         \
@@ -230,7 +232,9 @@ class Chroot:
 
     def set_root_password(self, root_password: str):
         root_password_proc = self.__wrap_chroot(
-            "passwd", 7, wait_for_proc=False
+            "passwd",
+            PipeOpts.STDOUT | PipeOpts.STDERR | PipeOpts.STDIN,
+            wait_for_proc=False
         )
         
         if not self.dry_run and isinstance(root_password_proc, subprocess.Popen):
@@ -285,7 +289,10 @@ class Chroot:
                 # Add user to the group
                 self.__wrap_chroot(f"usermod -a -G {group}, {username}")
 
-        passwd_proc = self.__wrap_chroot(f"passwd {username}", 7, wait_for_proc=False)
+        passwd_proc = self.__wrap_chroot(f"passwd {username}",
+                                         PipeOpts.STDOUT | PipeOpts.STDERR | PipeOpts.STDIN,
+                                         wait_for_proc=False)
+
         if not self.dry_run and isinstance(passwd_proc, subprocess.Popen):
             passwd_proc.communicate(f"{password}\n{password}".encode())
             
@@ -331,7 +338,10 @@ class Chroot:
         self.__wrap_chroot("pacman --noconfirm -S mdadm")
 
         # Scan for the current RAID arrays and their configurations and add them to the mdadm.conf file
-        raid_conf = cmd.execute("mdadm --detail --scan", 6, self.dry_run)
+        raid_conf = cmd.execute("mdadm --detail --scan",
+                                PipeOpts.STDOUT | PipeOpts.STDERR,
+                                self.dry_run)
+
         if not self.dry_run and isinstance(raid_conf, tuple):
             with open(f"{self.target}/etc/mdadm.conf", "a") as mdadm_conf_file:
                 mdadm_conf_file.write(raid_conf[0].decode())
