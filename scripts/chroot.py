@@ -4,6 +4,7 @@ from re import (
 )
 
 from os import listdir
+import subprocess
 
 import command_utils as cmd
 import output_utils  as output
@@ -232,10 +233,9 @@ class Chroot:
             "passwd", 7, wait_for_proc=False
         )
         
-        if not self.dry_run:
+        if not self.dry_run and isinstance(root_password_proc, subprocess.Popen):
             root_password_proc.communicate(
-                f"{root_password}\n{root_password}".encode()
-            )
+                f"{root_password}\n{root_password}".encode())
 
     # --------------------------------------------------------------------------
 
